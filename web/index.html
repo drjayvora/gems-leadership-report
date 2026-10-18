@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>GEMS Admissions Report</title>
+<link rel="icon" href="favicon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Encode+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div id="gate" hidden>
+  <form id="gateForm" autocomplete="off">
+    <div class="brand brand-lg"><span class="mark">GEMS</span><span>Admissions Report</span></div>
+    <p class="muted">This report is encrypted. Enter the password to open it.</p>
+    <input type="password" id="pw" placeholder="Password" autocomplete="current-password" required>
+    <label class="check"><input type="checkbox" id="remember"> Stay unlocked on this device</label>
+    <button type="submit" id="unlockBtn" class="btn btn-primary">Unlock</button>
+    <div class="err" id="gateErr" role="alert"></div>
+  </form>
+</div>
+<header id="top" hidden>
+  <div class="top-inner">
+    <a class="brand" href="#/funnel"><span class="mark">GEMS</span><span>Admissions Report</span></a>
+    <nav id="nav">
+      <a href="#/funnel" data-nav="funnel">Funnel</a>
+      <a href="#/productivity" data-nav="productivity">Productivity</a>
+      <a href="#/roi" data-nav="roi">Agency ROI</a>
+      <a href="#/calls" data-nav="calls">Calls</a>
+      <a href="#/notes" data-nav="notes">Definitions</a>
+    </nav>
+    <button class="btn btn-ghost" id="lock">Lock</button>
+  </div>
+</header>
+<div id="filters" hidden></div>
+<main id="view" hidden></main>
+<script src="app.js"></script>
+</body>
+</html>

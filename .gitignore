@@ -1,0 +1,11 @@
+# Raw CRM pulls and the unencrypted report data never go to GitHub. Only docs/ (encrypted) is published.
+build/
+showcase.json
+__pycache__/
+.DS_Store
+# Agency spend is commercial data: kept out of the public repo, it only ships inside the encrypted report.
+spend/*.csv
+!spend/TEMPLATE.csv
+*.png
+!web/*.png
+!docs/*.png

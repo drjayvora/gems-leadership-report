@@ -1,0 +1,48 @@
+{
+  "season": "2027-28",
+  "season_start": "2026-09-01",
+  "crm": "https://gemseducation.m.frappe.cloud",
+
+  "definitions": {
+    "lead": "Every CRM lead created in the period, excluding leads marked as duplicates.",
+    "visit_scheduled": "Lead has a campus visit booked (any GEMS Visit, or visit state Booked / Attended / No show).",
+    "visit_done": "Walk-in: the campus visit is marked Done (or the lead's visit state is Attended).",
+    "application": "Application fee paid (deal has an application fee paid date, or has moved past that stage).",
+    "admission": "Admission fee paid (deal has a blocking/admission fee paid date, or is Enrolled)."
+  },
+
+  "application_statuses": ["Application Fee Paid", "Documents Submitted", "Admission Letter Released", "Blocking Fee Paid", "Enrolled"],
+  "admission_statuses": ["Blocking Fee Paid", "Enrolled"],
+
+  "ignore_users": ["jay.vora@gemsedu.in", "hello@alignd.in", "admissiondesk@gemsedu.in", "Administrator", "Guest"],
+
+  "school_short": {
+    "GEMS Millennium School - Indirapuram": "GMS Indirapuram",
+    "GEMS Millennium School - Gurugram": "GMS Gurugram",
+    "GEMS Millennium School - Kochi": "GMS Kochi",
+    "GEMS Modern Academy - Kochi": "GMA Kochi",
+    "GEMS Modern Academy - Coimbatore": "GMA Coimbatore",
+    "GEMS School of Excellence - Lucknow": "GSE Lucknow",
+    "GEMS School of Excellence - Jodhpur": "GSE Jodhpur",
+    "GEMS Millennium School - Vikhroli": "GMS Vikhroli",
+    "GEMS Millennium School - Varanasi": "GMS Varanasi",
+    "GEMS Millennium School - Raipur": "GMS Raipur",
+    "GEMS Millennium School - Kalyan": "GMS Kalyan",
+    "Little GEMS - Kochi": "Little GEMS Kochi"
+  },
+
+  "channels": {
+    "Meta": ["Meta Ads", "Instagram Ads", "Facebook"],
+    "Google": ["Google Ads"]
+  },
+
+  "agencies": {
+    "EchoVME": {
+      "adapter": "agencies/echovme.py",
+      "sheet_env": "ECHOVME_SHEET",
+      "utm_sources": []
+    },
+    "Edelytics": {"adapter": "spend/TEMPLATE.csv", "utm_sources": []},
+    "Because": {"adapter": "spend/TEMPLATE.csv", "utm_sources": []}
+  }
+}
