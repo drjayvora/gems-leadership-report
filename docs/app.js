@@ -233,10 +233,7 @@
       const win = l => l[1] === si && l[0] >= g.first && l[0] <= g.last;
       const all = D.leads.map((l, i) => [l, i]).filter(([l]) => win(l));
       const paid = all.filter(([l]) => src.has(l[2]));
-      // Spend before the school's first CRM lead can't be matched to leads: shown, but left out of the cost ratios.
-      const firstLead = D.leads.filter(l => l[1] === si).reduce((m, l) => !m || l[0] < m ? l[0] : m, null);
-      g.pre = spend.filter(x => x.school === g.school && (!firstLead || x.date < firstLead)).reduce((t, x) => t + x.spend, 0);
-      g.matched = g.spend - g.pre;
+      g.matched = g.spend;   // older leads were imported into the CRM, so all spend counts
       const ls = paid.map(([l]) => l), n = ls.length;
       const c = count(ls);
       return Object.assign(g, { name: D.schools[si]?.short || g.school, meta: g.ch.Meta || 0, google: g.ch.Google || 0, agency: [...g.agencies].join(", "),
@@ -246,7 +243,7 @@
         hotwarm: ls.filter(l => l[12] === "Hot" || l[12] === "Warm").length });
     });
     const sum = k => rows.reduce((t, r) => t + (typeof r[k] === "number" ? r[k] : 0), 0);
-    const tot = { name: "Total", agency: "", first: null, meta: sum("meta"), google: sum("google"), spend: sum("spend"), pre: sum("pre"), matched: sum("matched"),
+    const tot = { name: "Total", agency: "", first: null, meta: sum("meta"), google: sum("google"), spend: sum("spend"), matched: sum("matched"),
       all: sum("all"), paid: sum("paid"), reached: sum("reached"), untouched: sum("untouched"), junk: sum("junk"), lost: sum("lost"), hotwarm: sum("hotwarm"),
       c: [0, 1, 2, 3, 4].map(i => rows.reduce((t, r) => t + r.c[i], 0)) };
     const per = (k, i) => r => r[k] && r.c[i] ? r[k] / r.c[i] : null;
@@ -295,7 +292,6 @@
       h("section", { class: "card" }, h("h2", {}, "Spend, leads and cost by school"),
         h("p", { class: "sub" }, "Spend is what the agencies report. Leads and every stage after them come from the CRM."),
         rows.length ? table(costCols, rows, { total: tot, sort: 5 }) : h("p", { class: "muted" }, "No spend data in these dates."),
-        tot.pre ? h("p", { class: "warnbox" }, `${inr(tot.pre)} of this spend was before those schools had any leads in the CRM, so it can't be matched to leads. The cost columns use the remaining ${inr(tot.matched)}.`) : null,
         spread ? h("p", { class: "note" }, "Some agencies sent one total for a period. That total is spread evenly over its days, so a shorter date filter shows a pro-rated share.") : null),
       h("section", { class: "card" }, h("h2", {}, "Lead quality and funnel, paid leads"),
         h("p", { class: "sub" }, "Share of each school's paid leads at each stage so far."),
