@@ -5,7 +5,7 @@ Env: FRAPPE_TOKEN ("token key:secret"), or FRAPPE_API_KEY + FRAPPE_API_SECRET.
 Everyone else who works leads in the CRM is treated as a school counsellor.
 The output holds no parent names, phone numbers or emails: leads are reduced to dates, school, source and stage.
 """
-import collections as C, csv, datetime, glob, json, os, statistics, time, urllib.parse, urllib.request
+import collections as C, datetime, json, os, statistics, time, urllib.parse, urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 CFG = json.load(open(os.path.join(HERE, "config.json")))
@@ -36,7 +36,7 @@ def get(doctype, fields, filters=()):
 
 
 leads = get("CRM Lead", ["name", "creation", "source", "territory", "status", "is_duplicate", "utm_source", "visit_state",
-                         "visit_done_on", "_assign", "lead_owner", "attempt_count", "mobile_no", "phone"])
+                         "visit_done_on", "_assign", "lead_owner", "attempt_count", "mobile_no", "phone", "intent"])
 deals = get("CRM Deal", ["lead", "status", "deal_owner", "application_submitted_on", "application_fee_paid_on",
                          "blocking_fee_paid_on", "enrolled_on", "modified"])
 visits = get("GEMS Visit", ["enquiry", "campus", "creation", "scheduled_on", "status", "attended_on", "conducted_by", "owner"])
@@ -101,7 +101,7 @@ for i, l in enumerate(leads):
     L.append([day(l["creation"]), six[l["territory"] or "Unassigned"], srcix[l["source"] or "Not set"], l["status"],
               vs, vd, app.get(i), adm.get(i), [p for p in assignees if p >= 0],
               1 if (l["status"] == "New" and not (l["attempt_count"] or 0)) else 0, (l["utm_source"] or "").lower(),
-              l["creation"][:16]])
+              l["creation"][:16], l["intent"] or ""])
 
 # Calls: [date, person, "O"/"I", connected, seconds, lead index or -1, datetime]
 K = []
@@ -125,18 +125,6 @@ for v in visits:
     V.append([day(v["creation"]), person(v["owner"]), person(v["conducted_by"]), v["status"],
               day(v["attended_on"]) if v["status"] == "Done" else None, six.get(v["campus"], -1)])
 
-# Agency spend: every spend/*.csv in the standard format (TEMPLATE.csv is the example)
-S = []
-for f in sorted(glob.glob(os.path.join(HERE, "spend", "*.csv"))):
-    if f.endswith("TEMPLATE.csv"):
-        continue
-    for r in csv.DictReader(open(f)):
-        S.append(dict(date=r["date"], agency=r["agency"], school=r["school"], channel=r["channel"], objective=r["objective"],
-                      spend=float(r["spend"] or 0), impressions=float(r["impressions"] or 0), reach=float(r["reach"] or 0),
-                      agency_leads=float(r["agency_leads"] or 0)))
-for sch in {s["school"] for s in S} - set(six):
-    six[sch] = len(schools); schools.append(sch)
-
 data = dict(
     meta=dict(season=CFG["season"], start=min([l[0] for l in L] or [START]), end=NOW.strftime("%Y-%m-%d"), taken=NOW.strftime("%-d %b %Y, %-I:%M %p IST"),
               definitions=CFG["definitions"]),
@@ -144,9 +132,9 @@ data = dict(
     sources=sources, channels=CFG["channels"],
     agencies={k: dict(utm_sources=v.get("utm_sources", [])) for k, v in CFG["agencies"].items()},
     people=[dict(name=p["name"], role=p["role"]) for p in people],
-    leads=L, calls=K, visits=V, spend=S)
+    leads=L, calls=K, visits=V)
 os.makedirs(os.path.join(HERE, "build"), exist_ok=True)
 json.dump(data, open(os.path.join(HERE, "build", "data.json"), "w"), separators=(",", ":"))
-print("written: leads", len(L), "calls", len(K), "visits", len(V), "spend rows", len(S), "people", len(people))
+print("written: leads", len(L), "calls", len(K), "visits", len(V), "people", len(people))
 for name, f in [("visits scheduled", 4), ("visits done", 5), ("applications", 6), ("admissions", 7)]:
     print(name, sum(1 for x in L if x[f]))

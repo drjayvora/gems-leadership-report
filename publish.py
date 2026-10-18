@@ -6,7 +6,7 @@ Password: env LEADERSHIP_PASSWORD, or the file ~/.gems_leadership_password. Neve
   publish.py              re-encrypt the latest data
   publish.py --new-salt   new salt (old links and remembered devices stop working; recordings must be re-encrypted)
 """
-import base64, gzip, json, os, secrets, shutil, sys
+import base64, csv, datetime, glob, gzip, io, json, os, secrets, shutil, sys
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
@@ -33,6 +33,31 @@ if os.path.exists(sp):
 if os.path.exists(se):
     b = open(se, "rb").read()
     data["showcase"] = json.loads(AESGCM(key).decrypt(b[:12], b[12:], None))
+# Agency spend is commercial data, so the CSVs stay out of git: each spend/<agency>.csv is stored encrypted as
+# docs/spend/<agency>.enc, and a build without the CSV (e.g. the scheduled refresh) falls back to that copy.
+# A row with date_to covers a whole period; it is spread evenly over its days.
+os.makedirs(os.path.join(DOCS, "spend"), exist_ok=True)
+texts = {}
+for f in sorted(glob.glob(os.path.join(DOCS, "spend", "*.enc"))):
+    b = open(f, "rb").read(); texts[os.path.basename(f)[:-4]] = AESGCM(key).decrypt(b[:12], b[12:], None).decode()
+for f in sorted(glob.glob(os.path.join(HERE, "spend", "*.csv"))):
+    name = os.path.basename(f)[:-4]
+    if name == "TEMPLATE":
+        continue
+    texts[name] = open(f).read()
+    open(os.path.join(DOCS, "spend", name + ".enc"), "wb").write(enc(texts[name].encode()))
+spend = []
+for name, text in texts.items():
+    for r in csv.DictReader(io.StringIO(text)):
+        d0 = datetime.date.fromisoformat(r["date"]); d1 = datetime.date.fromisoformat(r.get("date_to") or r["date"])
+        n = (d1 - d0).days + 1
+        for i in range(n):
+            spend.append(dict(date=(d0 + datetime.timedelta(days=i)).isoformat(), agency=r["agency"], school=r["school"], channel=r["channel"],
+                              objective=r["objective"], spread=n > 1, **{k: float(r.get(k) or 0) / n for k in ("spend", "impressions", "reach", "agency_leads")}))
+data["spend"] = spend
+names = {s["name"] for s in data["schools"]}
+for sch in sorted({x["school"] for x in spend} - names):
+    data["schools"].append(dict(name=sch, short=sch))
 raw = json.dumps(data, separators=(",", ":")).encode()
 open(os.path.join(DOCS, "data.enc"), "wb").write(enc(gzip.compress(raw, mtime=0)))
 json.dump(k, open(kp, "w"))

@@ -216,76 +216,94 @@
     ];
   }
 
-  // ---------- agency ROI ----------
+  // ---------- spend & lead quality, by school ----------
   function viewROI() {
     const spend = D.spend.filter(x => inRange(x.date) && (F.school < 0 || x.school === D.schools[F.school].name));
-    const sIdx = name => D.schools.findIndex(s => s.name === name);
     const srcOf = ch => new Set((D.channels[ch] || []).map(s => D.sources.indexOf(s)));
-    const groups = {};
+    const reached = new Set(D.calls.filter(k => k[3] && k[5] >= 0).map(k => k[5]));
+    const bySchool = {};
     for (const x of spend) {
-      const k = [x.agency, x.school, x.channel].join("|");
-      const g = groups[k] ||= { agency: x.agency, school: x.school, channel: x.channel, brand: 0, gen: 0, impressions: 0, agencyLeads: 0, first: null, last: null };
-      if (/lead/i.test(x.objective)) g.gen += x.spend; else g.brand += x.spend;
-      g.impressions += x.impressions; g.agencyLeads += x.agency_leads;
+      const g = bySchool[x.school] ||= { school: x.school, agencies: new Set(), ch: {}, spend: 0, first: null, last: null, spread: false };
+      g.agencies.add(x.agency); g.spend += x.spend; g.ch[x.channel] = (g.ch[x.channel] || 0) + x.spend; g.spread ||= x.spread;
       if (x.spend > 0) { g.first = !g.first || x.date < g.first ? x.date : g.first; g.last = !g.last || x.date > g.last ? x.date : g.last; }
     }
-    const rows = Object.values(groups).map(g => {
-      g.spend = g.brand + g.gen;
-      const src = srcOf(g.channel), si = sIdx(g.school), utm = (D.agencies[g.agency]?.utm_sources || []).map(s => s.toLowerCase());
-      // Spend before the school's first CRM lead can't be matched to leads, so it is shown but left out of the cost ratios.
+    const rows = Object.values(bySchool).map(g => {
+      const si = D.schools.findIndex(s => s.name === g.school);
+      const src = new Set(Object.keys(g.ch).flatMap(ch => [...srcOf(ch)]));
+      const win = l => l[1] === si && l[0] >= g.first && l[0] <= g.last;
+      const all = D.leads.map((l, i) => [l, i]).filter(([l]) => win(l));
+      const paid = all.filter(([l]) => src.has(l[2]));
+      // Spend before the school's first CRM lead can't be matched to leads: shown, but left out of the cost ratios.
       const firstLead = D.leads.filter(l => l[1] === si).reduce((m, l) => !m || l[0] < m ? l[0] : m, null);
-      g.pre = spend.filter(x => x.agency === g.agency && x.school === g.school && x.channel === g.channel && (!firstLead || x.date < firstLead)).reduce((t, x) => t + x.spend, 0);
+      g.pre = spend.filter(x => x.school === g.school && (!firstLead || x.date < firstLead)).reduce((t, x) => t + x.spend, 0);
       g.matched = g.spend - g.pre;
-      const ls = D.leads.filter(l => l[1] === si && src.has(l[2]) && l[0] >= g.first && l[0] <= g.last && (!utm.length || utm.includes(l[10])));
-      // Other agencies paid for the same school and channel in the same window: split leads by spend share.
-      const shared = spend.filter(x => x.school === g.school && x.channel === g.channel && x.agency !== g.agency && x.date >= g.first && x.date <= g.last)
-        .reduce((s, x) => s + x.spend, 0);
-      g.share = utm.length ? 1 : g.spend / (g.spend + shared);
-      g.c = count(ls).map(n => n * g.share);
-      g.name = `${g.agency} · ${D.schools[si]?.short || g.school} · ${g.channel}`;
-      return g;
+      const ls = paid.map(([l]) => l), n = ls.length;
+      const c = count(ls);
+      return Object.assign(g, { name: D.schools[si]?.short || g.school, meta: g.ch.Meta || 0, google: g.ch.Google || 0, agency: [...g.agencies].join(", "),
+        all: all.length, paid: n, c,
+        reached: paid.filter(([, i]) => reached.has(i)).length, untouched: ls.filter(l => l[9]).length,
+        junk: ls.filter(l => l[3] === "Junk").length, lost: ls.filter(l => l[3] === "Lost").length,
+        hotwarm: ls.filter(l => l[12] === "Hot" || l[12] === "Warm").length });
     });
-    const cols = [
-      { t: "Agency · school · channel", v: r => r.name, f: x => x },
-      { t: "Dates", v: r => r.first || "", f: (x) => x, tip: "First and last day with spend in the filter" },
-      { t: "Branding spend", v: r => r.brand, f: inr }, { t: "Lead-gen spend", v: r => r.gen, f: inr }, { t: "Total spend", v: r => r.spend, f: inr, bar: true },
-      { t: "CRM leads", v: r => r.c[0], f: fmt1 }, { t: "Walk-ins", v: r => r.c[2], f: fmt1 }, { t: "Applications", v: r => r.c[3], f: fmt1 }, { t: "Admissions", v: r => r.c[4], f: fmt1 },
-      { t: "Spend before CRM leads", v: r => r.pre, f: inr, tip: "Spent before this school had any leads in the CRM; left out of the cost columns" },
-      { t: "Cost / lead", v: r => r.c[0] ? r.matched / r.c[0] : null, f: inr }, { t: "Cost / walk-in", v: r => r.c[2] ? r.matched / r.c[2] : null, f: inr },
-      { t: "Cost / application", v: r => r.c[3] ? r.matched / r.c[3] : null, f: inr },
-      { t: "Leads reported by agency", v: r => r.agencyLeads, f: fmt, tip: "For reference only; the report uses CRM leads" }];
-    cols[1].v = r => r.first ? `${dshort(r.first)} – ${dshort(r.last)}` : "–";
-    const agencies = [...new Set(rows.map(r => r.agency))].map(a => { const rs = rows.filter(r => r.agency === a);
-      const s = k => rs.reduce((t, r) => t + r[k], 0), c = [0, 1, 2, 3, 4].map(i => rs.reduce((t, r) => t + r.c[i], 0));
-      return { agency: a, spend: s("spend"), brand: s("brand"), gen: s("gen"), c, n: rs.length }; });
-    const tot = { name: "Total", first: null, brand: rows.reduce((t, r) => t + r.brand, 0), gen: rows.reduce((t, r) => t + r.gen, 0), spend: rows.reduce((t, r) => t + r.spend, 0), pre: rows.reduce((t, r) => t + r.pre, 0), matched: rows.reduce((t, r) => t + r.matched, 0),
-      c: [0, 1, 2, 3, 4].map(i => rows.reduce((t, r) => t + r.c[i], 0)), agencyLeads: rows.reduce((t, r) => t + r.agencyLeads, 0) };
-    // Coverage: paid-channel CRM leads with and without spend data
-    const cover = [];
+    const sum = k => rows.reduce((t, r) => t + (typeof r[k] === "number" ? r[k] : 0), 0);
+    const tot = { name: "Total", agency: "", first: null, meta: sum("meta"), google: sum("google"), spend: sum("spend"), pre: sum("pre"), matched: sum("matched"),
+      all: sum("all"), paid: sum("paid"), reached: sum("reached"), untouched: sum("untouched"), junk: sum("junk"), lost: sum("lost"), hotwarm: sum("hotwarm"),
+      c: [0, 1, 2, 3, 4].map(i => rows.reduce((t, r) => t + r.c[i], 0)) };
+    const per = (k, i) => r => r[k] && r.c[i] ? r[k] / r.c[i] : null;
+    const share = (k) => ({ v: r => r.paid ? r[k] / r.paid : null, f: x => x == null ? "–" : Math.round(100 * x) + "%" });
+    const costCols = [
+      { t: "School", v: r => r.name, f: x => x },
+      { t: "Agency", v: r => r.agency, f: x => x },
+      { t: "Dates", v: r => r.first ? `${dshort(r.first)} – ${dshort(r.last)}` : "–", f: x => x, tip: "First and last day with spend in the selected dates" },
+      { t: "Meta spend", v: r => r.meta, f: inr }, { t: "Google spend", v: r => r.google, f: inr },
+      { t: "Total spend", v: r => r.spend, f: inr, bar: true },
+      { t: "Paid leads", v: r => r.paid, tip: "CRM leads from the channels this school paid for (Meta = Meta, Instagram and Facebook ads; Google = Google Ads), in the spend dates" },
+      { t: "CPL", v: r => r.paid ? r.matched / r.paid : null, f: inr, tip: "Cost per paid lead" },
+      { t: "All leads", v: r => r.all, tip: "Every CRM lead for the school in the spend dates, any source" },
+      { t: "Blended CPL", v: r => r.all ? r.matched / r.all : null, f: inr, tip: "Spend divided by all leads" },
+      { t: "Walk-ins", v: r => r.c[2] }, { t: "Cost / walk-in", v: per("matched", 2), f: inr },
+      { t: "Applications", v: r => r.c[3] }, { t: "Cost / application", v: per("matched", 3), f: inr },
+      { t: "Admissions", v: r => r.c[4] }, { t: "Cost / admission", v: per("matched", 4), f: inr }];
+    const qualCols = [
+      { t: "School", v: r => r.name, f: x => x },
+      { t: "Paid leads", v: r => r.paid, bar: true },
+      { t: "Reached", ...share("reached"), tip: "At least one connected call" },
+      { t: "Untouched", ...share("untouched"), tip: "Still New and never dialled" },
+      { t: "Hot or warm", ...share("hotwarm"), tip: "Intent marked Hot or Warm by the counsellor" },
+      { t: "Junk", ...share("junk") }, { t: "Lost", ...share("lost") },
+      { t: "Visit scheduled", v: r => r.paid ? r.c[1] / r.paid : null, f: x => x == null ? "–" : Math.round(100 * x) + "%" },
+      { t: "Walk-in", v: r => r.paid ? r.c[2] / r.paid : null, f: x => x == null ? "–" : Math.round(100 * x) + "%" },
+      { t: "Application", v: r => r.paid ? r.c[3] / r.paid : null, f: x => x == null ? "–" : (Math.round(1000 * x) / 10) + "%" },
+      { t: "Admission", v: r => r.paid ? r.c[4] / r.paid : null, f: x => x == null ? "–" : (Math.round(1000 * x) / 10) + "%" }];
+    // Paid leads at schools with no spend data for that channel
+    const missing = [];
     for (const ch of Object.keys(D.channels)) {
       const src = srcOf(ch);
       D.schools.forEach((s, si) => {
-        const ls = D.leads.filter(l => l[1] === si && src.has(l[2]) && leadOk(l));
-        if (!ls.length) return;
-        const has = rows.some(r => r.school === s.name && r.channel === ch);
-        cover.push({ name: s.short, ch, n: ls.length, has });
+        if (spend.some(x => x.school === s.name && x.channel === ch)) return;
+        const n = D.leads.filter(l => l[1] === si && src.has(l[2]) && leadOk(l)).length;
+        if (n) missing.push({ name: s.short, ch, n });
       });
     }
-    const missing = cover.filter(x => !x.has);
+    const spread = rows.some(r => r.spread);
     return [
       h("div", { class: "tiles" },
-        h("div", { class: "tile" }, h("div", { class: "k" }, "Agency spend"), h("div", { class: "v" }, inr(tot.spend)), h("div", { class: "s" }, `${agencies.map(a => a.agency).join(", ") || "No agency data"} in the period`)),
-        h("div", { class: "tile" }, h("div", { class: "k" }, "CRM leads in those campaigns"), h("div", { class: "v" }, fmt(tot.c[0])), h("div", { class: "s" }, `Cost per lead ${inr(tot.c[0] ? tot.matched / tot.c[0] : null)}`)),
-        h("div", { class: "tile" }, h("div", { class: "k" }, "Walk-ins from them"), h("div", { class: "v" }, fmt(tot.c[2])), h("div", { class: "s" }, `Cost per walk-in ${inr(tot.c[2] ? tot.matched / tot.c[2] : null)}`)),
-        h("div", { class: "tile" }, h("div", { class: "k" }, "Applications from them"), h("div", { class: "v" }, fmt(tot.c[3])), h("div", { class: "s" }, `Cost per application ${inr(tot.c[3] ? tot.matched / tot.c[3] : null)}`))),
-      h("section", { class: "card" }, h("h2", {}, "Spend against CRM results"),
-        h("p", { class: "sub" }, "Spend comes from the agency. Leads and everything after come from the CRM: leads at that school from that channel (Meta = Meta, Instagram and Facebook ads; Google = Google Ads), created between the first and last day of spend."),
-        rows.length ? table(cols, rows, { total: tot, sort: 4 }) : h("p", { class: "muted" }, "No agency spend in this period."),
-        tot.pre ? h("p", { class: "warnbox" }, `${inr(tot.pre)} of this spend was before those schools had any leads in the CRM. It can't be matched to leads, so the cost columns use the remaining ${inr(tot.matched)}.`) : null),
+        h("div", { class: "tile" }, h("div", { class: "k" }, "Marketing spend"), h("div", { class: "v" }, inr(tot.spend)), h("div", { class: "s" }, `${rows.length} school${rows.length === 1 ? "" : "s"} with spend data`)),
+        h("div", { class: "tile" }, h("div", { class: "k" }, "Paid leads"), h("div", { class: "v" }, fmt(tot.paid)), h("div", { class: "s" }, `CPL ${inr(tot.paid ? tot.matched / tot.paid : null)}`)),
+        h("div", { class: "tile" }, h("div", { class: "k" }, "Walk-ins from paid leads"), h("div", { class: "v" }, fmt(tot.c[2])), h("div", { class: "s" }, `${inr(tot.c[2] ? tot.matched / tot.c[2] : null)} per walk-in`)),
+        h("div", { class: "tile" }, h("div", { class: "k" }, "Applications from paid leads"), h("div", { class: "v" }, fmt(tot.c[3])), h("div", { class: "s" }, `${inr(tot.c[3] ? tot.matched / tot.c[3] : null)} per application`))),
+      h("section", { class: "card" }, h("h2", {}, "Spend, leads and cost by school"),
+        h("p", { class: "sub" }, "Spend is what the agencies report. Leads and every stage after them come from the CRM."),
+        rows.length ? table(costCols, rows, { total: tot, sort: 5 }) : h("p", { class: "muted" }, "No spend data in these dates."),
+        tot.pre ? h("p", { class: "warnbox" }, `${inr(tot.pre)} of this spend was before those schools had any leads in the CRM, so it can't be matched to leads. The cost columns use the remaining ${inr(tot.matched)}.`) : null,
+        spread ? h("p", { class: "note" }, "Some agencies sent one total for a period. That total is spread evenly over its days, so a shorter date filter shows a pro-rated share.") : null),
+      h("section", { class: "card" }, h("h2", {}, "Lead quality and funnel, paid leads"),
+        h("p", { class: "sub" }, "Share of each school's paid leads at each stage so far."),
+        rows.length ? table(qualCols, rows, { total: tot, sort: 1 }) : null),
       h("section", { class: "card" }, h("h2", {}, "Paid leads with no spend data yet"),
-        h("p", { class: "sub" }, "Leads from paid channels at schools where no agency has sent spend for this period. They will be costed when Edelytics and Because send their data."),
+        h("p", { class: "sub" }, "Leads from paid channels at schools where no agency has sent spend for that channel in these dates."),
         missing.length ? table([{ t: "School", v: r => r.name, f: x => x }, { t: "Channel", v: r => r.ch, f: x => x }, { t: "CRM leads", v: r => r.n, bar: true }], missing, { sort: 2 })
-          : h("p", { class: "muted" }, "Every paid lead in this period has spend data."))
+          : h("p", { class: "muted" }, "Every paid lead in these dates has spend data."))
     ];
   }
 
@@ -318,14 +336,14 @@
       h("table", {}, h("tbody", {}, [["Lead", d.lead], ["Visit scheduled", d.visit_scheduled], ["Walk-in", d.visit_done], ["Application", d.application], ["Admission", d.admission],
         ["Funnel", "Counts leads created in the selected dates and how far each has progressed so far, so recent leads have had less time to convert."],
         ["Productivity", "Calls, visits, applications and admissions count when they happened, within the selected dates."],
-        ["Agency ROI", "Spend is what the agency reports. Leads, walk-ins, applications and admissions come from the CRM, never from the agency's own counts. If two agencies pay for the same school and channel on the same days, results are split by their share of spend."]]
+        ["Spend and ROI", "Spend is what the agencies report, by school. Leads, walk-ins, applications and admissions come from the CRM, never from the agency's own counts. Paid leads are CRM leads from the channels the school paid for, created between its first and last day of spend."]]
         .map(([k, v]) => h("tr", {}, h("td", {}, h("b", {}, k)), h("td", { style: "text-align:left;white-space:normal" }, v)))))),
       h("section", { class: "card" }, h("h2", {}, "Data"),
         h("p", {}, `Season ${D.meta.season}, from ${dshort(D.meta.start)}. Source: GEMS CRM, refreshed ${D.meta.taken}. Duplicate leads are excluded. The report holds no parent names or contact details.`))];
   }
 
   // ---------- router ----------
-  const VIEWS = { funnel: ["Funnel", viewFunnel], productivity: ["Productivity", viewProductivity], roi: ["Agency ROI", viewROI], calls: ["Calls", viewCalls], notes: ["Definitions", viewNotes] };
+  const VIEWS = { funnel: ["Funnel", viewFunnel], productivity: ["Productivity", viewProductivity], roi: ["Spend and ROI by school", viewROI], calls: ["Calls", viewCalls], notes: ["Definitions", viewNotes] };
   function render() {
     store.set("gems-lr-f", JSON.stringify(F));
     const name = (location.hash.match(/^#\/(\w+)/) || [])[1] in VIEWS ? location.hash.match(/^#\/(\w+)/)[1] : "funnel";

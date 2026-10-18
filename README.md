@@ -4,7 +4,7 @@ One password-protected page for leadership with four views, all filterable by da
 
 - **Funnel**: leads, visits scheduled, walk-ins (visits done), applications (application fee paid) and admissions (admission fee paid), by school and by lead source.
 - **Productivity**: pre-sales (central admissions desk) and school counsellors: leads assigned, untouched leads, dials, connects, talk time, visits, applications, admissions, time to first call.
-- **Agency ROI**: agency spend against CRM leads, walk-ins, applications and admissions, with cost per stage. Spend comes from the agency; every count after that comes from the CRM.
+- **Spend & ROI by school**: spend (all agencies) against CRM leads, CPL, lead quality (reached, untouched, hot/warm, junk, lost) and the funnel, with cost per walk-in, application and admission. Spend comes from the agencies; every count after that comes from the CRM.
 - **Calls**: a few recorded calls to listen to.
 
 Definitions live in `config.json` and are shown on the site's Definitions page.
@@ -25,11 +25,12 @@ Run locally: `FRAPPE_TOKEN=... CENTRAL_REPS='{"email":"Name"}' python3 build.py 
 ## Adding an agency
 
 Each agency's spend becomes rows in the standard format (`spend/TEMPLATE.csv`):
-`date, agency, school, channel, objective, spend, impressions, reach, agency_leads`
+`date, date_to, agency, school, channel, objective, spend, impressions, reach, agency_leads`
 
 - `school` is the exact CRM territory, `channel` is `Meta` or `Google` (mapped to CRM lead sources in `config.json`), `objective` is `Branding` or `Lead gen`.
-- Spend files are git-ignored (commercial data) and only ship inside the encrypted report. Sheet IDs live in repository secrets, never in the repo.
+- Spend CSVs are git-ignored (commercial data). `publish.py` stores each one encrypted in `docs/spend/`, so scheduled builds keep using them. Sheet IDs live in repository secrets, never in the repo.
 - If the agency sends a CSV in that format, drop it in `spend/<agency>.csv` and publish from a machine that has it, or add an adapter that downloads it. If it sends its own sheet layout, add an adapter like `agencies/echovme.py` that converts it.
+- A row may cover a whole period: fill `date_to` and the total is spread evenly over those days.
 - `agency_leads` is kept for reference only. The report always counts leads from the CRM.
 - When two agencies pay for the same school and channel on the same days, CRM results are split by share of spend. If an agency tags its leads with a UTM source, list it under `utm_sources` in `config.json` and its leads are matched exactly instead.
 
