@@ -1,6 +1,6 @@
 # GEMS admissions leadership report
 
-One password-protected page for leadership with four views, all filterable by dates, school and lead source:
+One password-protected page for leadership. The School view picks one campus and shows spend, leads, CPL, lead quality, the funnel, weekly trend and counsellors for it. The other views, all filterable by dates, school and lead source:
 
 - **Funnel**: leads, visits scheduled, walk-ins (visits done), applications (application fee paid) and admissions (admission fee paid), by school and by lead source.
 - **Productivity**: pre-sales (central admissions desk) and school counsellors: leads assigned, untouched leads, dials, connects, talk time, visits, applications, admissions, time to first call.
@@ -18,7 +18,7 @@ GEMS CRM (REST API)  ──────────────────┴�
 
 - `build.py` pulls leads, deals, visits and call logs and reduces them to dates, school, source, stage and counsellor. No parent names or contact details leave the CRM.
 - `publish.py` encrypts the data with AES-256-GCM under a key derived from the password (PBKDF2-SHA256, 600k iterations; salt in `docs/key.json`). The browser derives the same key, so the repo and site can be public while the content is not.
-- `.github/workflows/refresh.yml` rebuilds hourly once the secrets `FRAPPE_TOKEN`, `CENTRAL_REPS`, `LEADERSHIP_PASSWORD` and `ECHOVME_SHEET` are set.
+- `.github/workflows/refresh.yml` rebuilds hourly once the secrets `FRAPPE_TOKEN`, `CENTRAL_REPS`, `LEADERSHIP_PASSWORD`, `ECHOVME_SHEET` and `EDELYTICS_SHEET` are set.
 
 Run locally: `FRAPPE_TOKEN=... CENTRAL_REPS='{"email":"Name"}' python3 build.py && LEADERSHIP_PASSWORD=... python3 publish.py`, then `python3 -m http.server --directory docs`.
 

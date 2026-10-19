@@ -93,3 +93,11 @@ td.heat { text-align: center; }
 .call .meta { color: var(--muted); font-size: 12px; margin: 2px 0 8px; }
 .call p { margin: 0 0 10px; }
 .call audio { width: 100%; }
+
+.pickrow label { display: grid; gap: 4px; font-size: 12px; color: var(--muted); max-width: 520px; }
+.bigselect { font: inherit; font-size: 17px; font-weight: 600; padding: 9px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); width: 100%; }
+@media (max-width: 640px) {
+  .top-inner { gap: 8px; justify-content: space-between; }
+  #nav { order: 3; flex: 1 1 100%; flex-wrap: nowrap; overflow-x: auto; }
+  #nav a { white-space: nowrap; }
+}

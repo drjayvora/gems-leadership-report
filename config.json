@@ -42,7 +42,7 @@
       "sheet_env": "ECHOVME_SHEET",
       "utm_sources": []
     },
-    "Edelytics": {"adapter": "spend/TEMPLATE.csv", "utm_sources": []},
-    "Because": {"adapter": "spend/TEMPLATE.csv", "utm_sources": []}
+    "Edelytics": {"adapter": "agencies/edelytics.py", "sheet_env": "EDELYTICS_SHEET", "utm_sources": []},
+    "Because": {"adapter": "spend/because.csv (totals sent by message)", "utm_sources": []}
   }
 }

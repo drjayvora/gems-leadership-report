@@ -96,7 +96,7 @@
   }
 
   // ---------- chart: single-series daily bars ----------
-  function dailyBars(points, label) {
+  function dailyBars(points, label, vf) {
     const W = 760, H = 180, P = { l: 34, r: 8, t: 10, b: 24 };
     const max = Math.max(1, ...points.map(p => p[1])), n = points.length, bw = (W - P.l - P.r) / Math.max(n, 1);
     const y = v => H - P.b - (H - P.t - P.b) * v / max;
@@ -104,14 +104,14 @@
     const box = h("div", { class: "chart" }), tip = h("div", { class: "tip", hidden: "" });
     const ns = "http://www.w3.org/2000/svg", s = (t, a) => { const e = document.createElementNS(ns, t); for (const k in a) e.setAttribute(k, a[k]); return e; };
     const svg = s("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": label });
-    ticks.forEach(t => { svg.append(s("line", { x1: P.l, x2: W - P.r, y1: y(t), y2: y(t), class: "grid" })); const tx = s("text", { x: P.l - 6, y: y(t) + 3, "text-anchor": "end", class: "axis" }); tx.textContent = t; svg.append(tx); });
+    ticks.forEach(t => { svg.append(s("line", { x1: P.l, x2: W - P.r, y1: y(t), y2: y(t), class: "grid" })); const tx = s("text", { x: P.l - 6, y: y(t) + 3, "text-anchor": "end", class: "axis" }); tx.textContent = vf && t >= 1000 ? Math.round(t / 1000) + "k" : t; svg.append(tx); });
     const every = Math.ceil(n / 8);
     points.forEach(([d, v], i) => {
       const x = P.l + i * bw, bh = H - P.b - y(v);
       if (v) { const r = Math.min(4, bw / 2 - 1, bh); svg.append(s("path", { fill: "var(--bar)",
         d: `M${x + 1},${H - P.b} v${-(bh - r)} q0,${-r} ${r},${-r} h${Math.max(0, bw - 2 - 2 * r)} q${r},0 ${r},${r} v${bh - r} z` })); }
       const hit = s("rect", { x, y: P.t, width: bw, height: H - P.t - P.b, fill: "transparent" });
-      hit.addEventListener("mouseenter", () => { tip.hidden = false; tip.textContent = `${dshort(d)}: ${v} ${label.toLowerCase()}`;
+      hit.addEventListener("mouseenter", () => { tip.hidden = false; tip.textContent = vf ? `${dshort(d)}: ${vf(v)}` : `${dshort(d)}: ${v} ${label.toLowerCase()}`;
         tip.style.left = (100 * (x + bw / 2) / W) + "%"; tip.style.top = (100 * y(v) / H) + "%"; });
       hit.addEventListener("mouseleave", () => tip.hidden = true);
       svg.append(hit);
@@ -213,6 +213,84 @@
         h("p", { class: "sub" }, "The school is where most of each counsellor's leads are. A lead handed over from the desk stays with both, so it counts for both."),
         table(cols(true), sch, { total: tot(sch), sort: 2 }),
         crmCalls < sum(pre, "dials") / 10 ? h("p", { class: "warnbox" }, `School counsellors logged ${fmt(crmCalls)} dials in the CRM in this period, against ${fmt(sum(pre, "dials"))} from the desk. If they call from personal phones, their calling isn't captured here.`) : null)
+    ];
+  }
+
+  // ---------- one school: spend -> leads -> funnel ----------
+  function viewSchool() {
+    const withData = D.schools.map((s, i) => [s, i, D.leads.filter(l => l[1] === i).length + (D.spend.some(x => x.school === s.name) ? 1e6 : 0)])
+      .filter(([, , n]) => n).sort((a, b) => b[2] - a[2]);
+    // The School view keeps its own pick, so the other tabs stay on all schools.
+    if (!(F.pick >= 0) && withData.length) F.pick = withData[0][1];
+    const si = F.pick, school = D.schools[si];
+    const picker = h("select", { class: "bigselect", onchange: e => { F.pick = +e.target.value; render(); } },
+      withData.map(([s, i]) => h("option", { value: i, selected: i === si ? "" : null }, s.name)));
+    if (!school) return [picker];
+    const srcOf = ch => new Set((D.channels[ch] || []).map(s => D.sources.indexOf(s)));
+    const paidSrc = new Set(Object.keys(D.channels).flatMap(ch => [...srcOf(ch)]));
+    const sp = D.spend.filter(x => x.school === school.name && inRange(x.date));
+    const spendTot = sp.reduce((t, x) => t + x.spend, 0);
+    const ls = D.leads.map((l, i) => [l, i]).filter(([l]) => l[1] === si && inRange(l[0]) && (F.source < 0 || l[2] === F.source));
+    const all = ls.map(([l]) => l), paid = ls.filter(([l]) => paidSrc.has(l[2]));
+    const c = count(all), cp = count(paid.map(([l]) => l));
+    const reached = new Set(D.calls.filter(k => k[3] && k[5] >= 0).map(k => k[5]));
+    const pc = (a, b) => b ? Math.round(100 * a / b) + "%" : "–";
+    const cost = n => spendTot && n ? inr(spendTot / n) : "–";
+    // Funnel with cost per stage
+    const stages = [["Leads (all sources)", c[0]], ["Paid leads (Meta and Google)", cp[0]], ["Visits scheduled", c[1]], ["Walk-ins", c[2]], ["Applications", c[3]], ["Admissions", c[4]]];
+    // Channels
+    const chans = [...new Set([...sp.map(x => x.channel), ...Object.keys(D.channels).filter(ch => paid.some(([l]) => srcOf(ch).has(l[2])))])].map(ch => {
+      const xs = sp.filter(x => x.channel === ch), s = xs.reduce((t, x) => t + x.spend, 0);
+      const pl = paid.filter(([l]) => srcOf(ch).has(l[2])).map(([l]) => l), cc = count(pl);
+      return { name: ch, agency: [...new Set(xs.map(x => x.agency))].join(", ") || "No spend data", spend: s, impressions: xs.reduce((t, x) => t + x.impressions, 0),
+        agencyLeads: xs.reduce((t, x) => t + x.agency_leads, 0), c: cc };
+    });
+    // Weekly trend (weeks start Monday)
+    const wk = d => { const t = new Date(d + "T00:00"); t.setDate(t.getDate() - ((t.getDay() + 6) % 7)); return t.toISOString().slice(0, 10); };
+    const weeks = {};
+    for (const x of sp) (weeks[wk(x.date)] ||= { spend: 0, all: [], paid: [] }).spend += x.spend;
+    for (const [l] of ls) { const w = (weeks[wk(l[0])] ||= { spend: 0, all: [], paid: [] }); w.all.push(l); if (paidSrc.has(l[2])) w.paid.push(l); }
+    const wrows = Object.entries(weeks).sort().map(([w, v]) => ({ name: w, spend: v.spend, all: v.all.length, paid: v.paid.length, c: count(v.all) }));
+    const q = paid.map(([l]) => l);
+    const qual = [["Reached (connected call)", paid.filter(([, i]) => reached.has(i)).length], ["Untouched (still New, never dialled)", q.filter(l => l[9]).length],
+      ["Hot or warm intent", q.filter(l => l[12] === "Hot" || l[12] === "Warm").length], ["Junk", q.filter(l => l[3] === "Junk").length], ["Lost", q.filter(l => l[3] === "Lost").length]];
+    const keep = F.school; F.school = si; const team0 = productivity(); F.school = keep;
+    const team = team0.filter(r => r.assigned || r.dials || r.vb || r.vd);
+    const dates = days();
+    return [
+      h("div", { class: "pickrow" }, h("label", {}, "School", picker)),
+      h("div", { class: "tiles" },
+        [["Spend", inr(spendTot), sp.length ? [...new Set(sp.map(x => x.agency))].join(", ") : "No spend data"],
+         ["Leads", fmt(c[0]), `${fmt(cp[0])} from paid ads`], ["CPL (paid leads)", cost(cp[0]), `Blended ${cost(c[0])} on all leads`],
+         ["Walk-ins", fmt(c[2]), `${pc(c[2], c[0])} of leads · ${cost(c[2])} each`], ["Applications", fmt(c[3]), `${cost(c[3])} each`], ["Admissions", fmt(c[4]), `${cost(c[4])} each`]]
+        .map(([k, v, s2]) => h("div", { class: "tile" }, h("div", { class: "k" }, k), h("div", { class: "v" }, v), h("div", { class: "s" }, s2)))),
+      h("div", { class: "grid2" },
+        h("section", { class: "card" }, h("h2", {}, "Spend to admission"), h("p", { class: "sub" }, "Leads created in the selected dates, and how far each has got. Cost uses spend in the same dates."),
+          h("div", { class: "tw" }, h("table", {}, h("thead", {}, h("tr", {}, ["Stage", "Count", "Conversion", "Cost each"].map(t => h("th", {}, t)))),
+            h("tbody", {}, h("tr", {}, h("td", {}, "Spend"), h("td", {}, inr(spendTot)), h("td", {}, ""), h("td", {}, "")),
+              stages.map(([t, n], i) => h("tr", {}, h("td", {}, t), h("td", {}, fmt(n)), h("td", {}, i < 2 ? (i ? pc(n, c[0]) + " of leads" : "") : pc(n, stages[i === 2 ? 0 : i - 1][1]) + " of prev."), h("td", {}, cost(n)))))))),
+        h("section", { class: "card" }, h("h2", {}, "Lead quality, paid leads"), h("p", { class: "sub" }, `${fmt(q.length)} leads from Meta and Google ads in these dates.`),
+          h("div", { class: "funnel" }, qual.map(([t, n]) => h("div", { class: "frow" }, h("div", {}, t),
+            h("div", { class: "track" }, h("div", { class: "fill", style: `width:${q.length ? 100 * n / q.length : 0}%` })),
+            h("div", { class: "n" }, fmt(n), h("span", {}, pc(n, q.length)))))))),
+      h("section", { class: "card" }, h("h2", {}, "By channel"), h("p", { class: "sub" }, "Spend from the agency; leads and later stages from the CRM. Meta covers Meta, Instagram and Facebook ads."),
+        table([{ t: "Channel", v: r => r.name, f: x => x }, { t: "Agency", v: r => r.agency, f: x => x }, { t: "Spend", v: r => r.spend, f: inr, bar: true },
+          { t: "Impressions", v: r => r.impressions }, { t: "CRM leads", v: r => r.c[0] }, { t: "CPL", v: r => r.spend && r.c[0] ? r.spend / r.c[0] : null, f: inr },
+          { t: "Walk-ins", v: r => r.c[2] }, { t: "Applications", v: r => r.c[3] }, { t: "Admissions", v: r => r.c[4] },
+          { t: "Leads reported by agency", v: r => r.agencyLeads, tip: "For reference only; the report uses CRM leads" }], chans, { sort: 2 })),
+      h("section", { class: "card" }, h("h2", {}, "By lead source"),
+        table(funnelCols("Source"), D.sources.map((s, i) => ({ name: s, c: count(all.filter(l => l[2] === i)) })).filter(r => r.c[0]), { total: { name: "Total", c } })),
+      h("section", { class: "card" }, h("h2", {}, "Week by week"), h("p", { class: "sub" }, "Weeks start on Monday."),
+        table([{ t: "Week of", v: r => r.name, f: dshort }, { t: "Spend", v: r => r.spend, f: inr, bar: true }, { t: "Leads", v: r => r.all }, { t: "Paid leads", v: r => r.paid },
+          { t: "CPL", v: r => r.spend && r.paid ? r.spend / r.paid : null, f: inr }, { t: "Visits scheduled", v: r => r.c[1] }, { t: "Walk-ins", v: r => r.c[2] }, { t: "Applications", v: r => r.c[3] }], wrows, { sort: 0 })),
+      h("div", { class: "grid2" },
+        h("section", { class: "card" }, h("h2", {}, "Spend per day"), dailyBars(dates.map(d => [d, Math.round(sp.filter(x => x.date === d).reduce((t, x) => t + x.spend, 0))]), "Spend", inr)),
+        h("section", { class: "card" }, h("h2", {}, "Leads per day"), dailyBars(dates.map(d => [d, all.filter(l => l[0] === d).length]), "Leads"))),
+      h("section", { class: "card" }, h("h2", {}, "Counsellors on this school's leads"), h("p", { class: "sub" }, "Activity on this school's leads in the selected dates."),
+        table([{ t: "Counsellor", v: r => r.name, f: x => x }, { t: "Role", v: r => r.role, f: x => x }, { t: "Leads assigned", v: r => r.assigned }, { t: "Untouched", v: r => r.untouched },
+          { t: "Dials", v: r => r.dials, bar: true }, { t: "Connects", v: r => r.connects }, { t: "Talk (min)", v: r => r.talk },
+          { t: "Visits scheduled", v: r => r.vb }, { t: "Walk-ins", v: r => r.vd }, { t: "Applications", v: r => r.apps }, { t: "First call (hrs)", v: r => r.firstHrs, f: fmt1 }], team, { sort: 2 })),
+      sp.some(x => x.spread) ? h("p", { class: "note" }, "This school's agency sent one total for a period, spread evenly over its days.") : null
     ];
   }
 
@@ -339,13 +417,14 @@
   }
 
   // ---------- router ----------
-  const VIEWS = { funnel: ["Funnel", viewFunnel], productivity: ["Productivity", viewProductivity], roi: ["Spend and ROI by school", viewROI], calls: ["Calls", viewCalls], notes: ["Definitions", viewNotes] };
+  const VIEWS = { school: ["School view", viewSchool], funnel: ["Funnel", viewFunnel], productivity: ["Productivity", viewProductivity], roi: ["Spend and ROI by school", viewROI], calls: ["Calls", viewCalls], notes: ["Definitions", viewNotes] };
   function render() {
     store.set("gems-lr-f", JSON.stringify(F));
-    const name = (location.hash.match(/^#\/(\w+)/) || [])[1] in VIEWS ? location.hash.match(/^#\/(\w+)/)[1] : "funnel";
+    const name = (location.hash.match(/^#\/(\w+)/) || [])[1] in VIEWS ? location.hash.match(/^#\/(\w+)/)[1] : "school";
     document.querySelectorAll("#nav a").forEach(a => a.classList.toggle("on", a.dataset.nav === name));
     filterBar();
     $("#filters").hidden = name === "calls" || name === "notes";
+    const ss = $("#filters select"); if (ss && name === "school") ss.closest("label").hidden = true;
     const v = $("#view"); v.innerHTML = "";
     v.append(h("h1", {}, VIEWS[name][0]), ...VIEWS[name][1]());
   }

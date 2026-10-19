@@ -128,7 +128,7 @@ for v in visits:
 data = dict(
     meta=dict(season=CFG["season"], start=min([l[0] for l in L] or [START]), end=NOW.strftime("%Y-%m-%d"), taken=NOW.strftime("%-d %b %Y, %-I:%M %p IST"),
               definitions=CFG["definitions"]),
-    schools=[dict(name=s, short=CFG["school_short"].get(s, s)) for s in schools],
+    schools=[dict(name=s, short=s) for s in schools],   # the CRM campus name, as the user asked
     sources=sources, channels=CFG["channels"],
     agencies={k: dict(utm_sources=v.get("utm_sources", [])) for k, v in CFG["agencies"].items()},
     people=[dict(name=p["name"], role=p["role"]) for p in people],
