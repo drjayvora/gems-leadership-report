@@ -1,4 +1,4 @@
-/* GEMS admissions leadership report. Screens: #/funnel · #/productivity · #/roi · #/calls · #/notes
+/* GEMS admissions leadership report. Screens: #/funnel · #/productivity · #/roi · #/school · #/calls
    Data arrives encrypted (docs/data.enc); the password derives the AES key in the browser. All numbers are computed here
    from lead/call/visit rows, so the filters (dates, school, source) apply everywhere. */
 (() => {
@@ -132,30 +132,24 @@
     { t: "Walk-in → application", v: r => r.c[2] ? r.c[3] / r.c[2] : null, f: x => x == null ? "–" : Math.round(100 * x) + "%" }];
   function viewFunnel() {
     const ls = D.leads.filter(leadOk), c = count(ls);
-    const bySchool = D.schools.map((s, i) => ({ name: s.short, c: count(ls.filter(l => l[1] === i)) })).filter(r => r.c[0]);
-    const bySource = D.sources.map((s, i) => ({ name: s, c: count(ls.filter(l => l[2] === i)) })).filter(r => r.c[0]);
+    const bySchool = D.schools.map((s, i) => ({ name: s.short, si: i, c: count(ls.filter(l => l[1] === i)) })).filter(r => r.c[0]);
     const srcCols = D.sources.map((s, i) => [s, i]).filter(([, i]) => ls.some(l => l[2] === i)).sort((a, b) => ls.filter(l => l[2] === b[1]).length - ls.filter(l => l[2] === a[1]).length);
-    const mx = Math.max(1, ...bySchool.flatMap(r => srcCols.map(([, j]) => ls.filter(l => l[1] === D.schools.findIndex(s => s.short === r.name) && l[2] === j).length)));
-    const per = days().map(d => [d, ls.filter(l => l[0] === d).length]);
+    const cell = (si, j) => ls.filter(l => l[1] === si && l[2] === j).length;
+    const mx = Math.max(1, ...bySchool.flatMap(r => srcCols.map(([, j]) => cell(r.si, j))));
     return [
-      h("div", { class: "tiles" }, STAGES.map(([t], i) => h("div", { class: "tile" }, h("div", { class: "k" }, t), h("div", { class: "v" }, fmt(c[i])),
-        h("div", { class: "s" }, i ? `${pct(c[i], c[0])} of leads` : `${dshort(F.from)} – ${dshort(F.to)}`)))),
       h("div", { class: "grid2" },
-        h("section", { class: "card" }, h("h2", {}, "Admissions funnel"), h("p", { class: "sub" }, "Leads created in the period, and how far each has got so far."),
+        h("section", { class: "card" }, h("h2", {}, "Admissions funnel"), h("p", { class: "sub" }, `Leads created ${dshort(F.from)} – ${dshort(F.to)}, and how far each has got so far.`),
           h("div", { class: "funnel" }, STAGES.map(([t], i) => h("div", { class: "frow" }, h("div", {}, t),
             h("div", { class: "track" }, h("div", { class: "fill", style: `width:${100 * c[i] / Math.max(1, c[0])}%` })),
-            h("div", { class: "n" }, fmt(c[i]), i ? h("span", {}, pct(c[i], c[i - 1]) + " of prev.") : null))))),
-        h("section", { class: "card" }, h("h2", {}, "New leads per day"), h("p", { class: "sub" }, "Leads created each day, with the current filters."), dailyBars(per, "Leads"))),
-      h("section", { class: "card" }, h("h2", {}, "By school"), h("p", { class: "sub" }, "Click a column to sort."),
+            h("div", { class: "n" }, fmt(c[i]), i ? h("span", {}, pct(c[i], c[0])) : null))))),
+        h("section", { class: "card" }, h("h2", {}, "New leads per day"), dailyBars(days().map(d => [d, ls.filter(l => l[0] === d).length]), "Leads"))),
+      h("section", { class: "card" }, h("h2", {}, "By school"),
         table(funnelCols("School"), bySchool, { total: { name: "Total", c } })),
-      h("section", { class: "card" }, h("h2", {}, "By lead source"), table(funnelCols("Source"), bySource, { total: { name: "Total", c } })),
-      h("section", { class: "card" }, h("h2", {}, "Leads by school and source"), h("p", { class: "sub" }, "Darker cells hold more leads."),
+      h("section", { class: "card" }, h("h2", {}, "Leads by school and source"),
         h("div", { class: "tw" }, h("table", {},
-          h("thead", {}, h("tr", {}, h("th", {}, "School"), srcCols.map(([s]) => h("th", {}, s)), h("th", {}, "Total"))),
-          h("tbody", {}, bySchool.map(r => { const si = D.schools.findIndex(s => s.short === r.name);
-            return h("tr", {}, h("td", {}, r.name), srcCols.map(([, j]) => { const n = ls.filter(l => l[1] === si && l[2] === j).length;
-              return h("td", { class: "heat", style: n ? `background:color-mix(in oklab, var(--heat-1) ${Math.round(8 + 72 * n / mx)}%, var(--heat-0));color:${n / mx > .55 ? "#fff" : "inherit"}` : null }, n || ""); }),
-              h("td", {}, h("b", {}, r.c[0]))); })))))
+          h("thead", {}, h("tr", {}, h("th", {}, "School"), srcCols.map(([s]) => h("th", {}, s)))),
+          h("tbody", {}, bySchool.map(r => h("tr", {}, h("td", {}, r.name), srcCols.map(([, j]) => { const n = cell(r.si, j);
+              return h("td", { class: "heat", style: n ? `background:color-mix(in oklab, var(--heat-1) ${Math.round(8 + 72 * n / mx)}%, var(--heat-0));color:${n / mx > .55 ? "#fff" : "inherit"}` : null }, n || ""); })))))))
     ];
   }
 
@@ -194,29 +188,26 @@
       { t: "Counsellor", v: r => r.name, f: x => x }, ...(school ? [{ t: "School", v: r => r.home, f: x => x }] : []),
       { t: "Leads assigned", v: r => r.assigned, tip: "Leads created in the period that are assigned to this person" },
       { t: "Untouched", v: r => r.untouched, tip: "Assigned, still New, never dialled" },
-      { t: "Dials", v: r => r.dials, bar: true }, { t: "Leads dialled", v: r => r.dialled },
-      { t: "Connects", v: r => r.connects }, { t: "Connect rate", v: r => r.dials ? r.connects / r.dials : null, f: x => x == null ? "–" : Math.round(100 * x) + "%" },
+      { t: "Dials", v: r => r.dials, bar: true },
+      { t: "Connect rate", v: r => r.dials ? r.connects / r.dials : null, f: x => x == null ? "–" : Math.round(100 * x) + "%" },
       { t: "Talk (min)", v: r => r.talk, f: fmt, tip: "Connected outgoing plus answered incoming calls" },
-      { t: "Dials / day", v: r => r.perDay, f: fmt1, tip: "Average on days with at least one dial" },
-      { t: "Incoming answered", v: r => r.incoming },
       { t: "Visits scheduled", v: r => r.vb, tip: "Visits this person booked in the period" },
       { t: "Walk-ins", v: r => r.vd, tip: "Visits done that this person booked or conducted" },
-      { t: "Applications", v: r => r.apps }, { t: "Admissions", v: r => r.adms },
+      { t: "Applications", v: r => r.apps },
       { t: "First call (hrs)", v: r => r.firstHrs, f: fmt1, tip: "Median hours from lead creation to this person's first dial" }];
     const pre = rows.filter(r => r.role === "Pre-sales"), sch = rows.filter(r => r.role === "School");
     const crmCalls = sum(sch, "dials");
     return [
       h("section", { class: "card" }, h("h2", {}, "Pre-sales: central admissions desk"),
-        h("p", { class: "sub" }, "Calls, connects and visits in the period. Leads assigned counts leads created in the period."),
         table(cols(false), pre, { total: tot(pre), sort: 3 })),
       h("section", { class: "card" }, h("h2", {}, "School counsellors"),
-        h("p", { class: "sub" }, "The school is where most of each counsellor's leads are. A lead handed over from the desk stays with both, so it counts for both."),
+        h("p", { class: "sub" }, "A lead handed over from the desk stays with both, so it counts for both."),
         table(cols(true), sch, { total: tot(sch), sort: 2 }),
-        crmCalls < sum(pre, "dials") / 10 ? h("p", { class: "warnbox" }, `School counsellors logged ${fmt(crmCalls)} dials in the CRM in this period, against ${fmt(sum(pre, "dials"))} from the desk. If they call from personal phones, their calling isn't captured here.`) : null)
+        crmCalls < sum(pre, "dials") / 10 ? h("p", { class: "warnbox" }, `School counsellors logged ${fmt(crmCalls)} dials in the CRM, against ${fmt(sum(pre, "dials"))} from the desk. Calls from personal phones aren't captured.`) : null)
     ];
   }
 
-  // ---------- one school: spend -> leads -> funnel ----------
+  // ---------- one school: spend -> leads -> funnel, and why leads are junk or lost ----------
   function viewSchool() {
     const withData = D.schools.map((s, i) => [s, i, D.leads.filter(l => l[1] === i).length + (D.spend.some(x => x.school === s.name) ? 1e6 : 0)])
       .filter(([, , n]) => n).sort((a, b) => b[2] - a[2]);
@@ -234,63 +225,56 @@
     const all = ls.map(([l]) => l), paid = ls.filter(([l]) => paidSrc.has(l[2]));
     const c = count(all), cp = count(paid.map(([l]) => l));
     const reached = new Set(D.calls.filter(k => k[3] && k[5] >= 0).map(k => k[5]));
-    const pc = (a, b) => b ? Math.round(100 * a / b) + "%" : "–";
     const cost = n => spendTot && n ? inr(spendTot / n) : "–";
-    // Funnel with cost per stage
-    const stages = [["Leads (all sources)", c[0]], ["Paid leads (Meta and Google)", cp[0]], ["Visits scheduled", c[1]], ["Walk-ins", c[2]], ["Applications", c[3]], ["Admissions", c[4]]];
-    // Channels
+    // Channels: only worth a table when the school pays for more than one
     const chans = [...new Set([...sp.map(x => x.channel), ...Object.keys(D.channels).filter(ch => paid.some(([l]) => srcOf(ch).has(l[2])))])].map(ch => {
       const xs = sp.filter(x => x.channel === ch), s = xs.reduce((t, x) => t + x.spend, 0);
-      const pl = paid.filter(([l]) => srcOf(ch).has(l[2])).map(([l]) => l), cc = count(pl);
-      return { name: ch, agency: [...new Set(xs.map(x => x.agency))].join(", ") || "No spend data", spend: s, impressions: xs.reduce((t, x) => t + x.impressions, 0),
-        agencyLeads: xs.reduce((t, x) => t + x.agency_leads, 0), c: cc };
+      return { name: ch, spend: s, c: count(paid.filter(([l]) => srcOf(ch).has(l[2])).map(([l]) => l)) };
     });
     // Weekly trend (weeks start Monday)
     const wk = d => { const t = new Date(d + "T00:00"); t.setDate(t.getDate() - ((t.getDay() + 6) % 7)); return t.toISOString().slice(0, 10); };
     const weeks = {};
-    for (const x of sp) (weeks[wk(x.date)] ||= { spend: 0, all: [], paid: [] }).spend += x.spend;
-    for (const [l] of ls) { const w = (weeks[wk(l[0])] ||= { spend: 0, all: [], paid: [] }); w.all.push(l); if (paidSrc.has(l[2])) w.paid.push(l); }
-    const wrows = Object.entries(weeks).sort().map(([w, v]) => ({ name: w, spend: v.spend, all: v.all.length, paid: v.paid.length, c: count(v.all) }));
+    for (const x of sp) (weeks[wk(x.date)] ||= { spend: 0, all: [], paid: 0 }).spend += x.spend;
+    for (const [l] of ls) { const w = (weeks[wk(l[0])] ||= { spend: 0, all: [], paid: 0 }); w.all.push(l); if (paidSrc.has(l[2])) w.paid++; }
+    const wrows = Object.entries(weeks).sort().map(([w, v]) => ({ name: w, spend: v.spend, paid: v.paid, c: count(v.all) }));
     const q = paid.map(([l]) => l);
-    const qual = [["Reached (connected call)", paid.filter(([, i]) => reached.has(i)).length], ["Untouched (still New, never dialled)", q.filter(l => l[9]).length],
+    const qual = [["Reached (connected call)", paid.filter(([, i]) => reached.has(i)).length], ["Untouched (never dialled)", q.filter(l => l[9]).length],
       ["Hot or warm intent", q.filter(l => l[12] === "Hot" || l[12] === "Warm").length], ["Junk", q.filter(l => l[3] === "Junk").length], ["Lost", q.filter(l => l[3] === "Lost").length]];
-    const keep = F.school; F.school = si; const team0 = productivity(); F.school = keep;
-    const team = team0.filter(r => r.assigned || r.dials || r.vb || r.vd);
-    const dates = days();
+    const bars = (rows, of) => h("div", { class: "funnel" }, rows.map(([t, n]) => h("div", { class: "frow" }, h("div", {}, t),
+      h("div", { class: "track" }, h("div", { class: "fill", style: `width:${of ? 100 * n / of : 0}%` })),
+      h("div", { class: "n" }, fmt(n), h("span", {}, pct(n, of))))));
+    // Junk and lost: reasons recorded in the CRM, plus the written read-out and proof calls
+    const jl = all.filter(l => l[3] === "Junk" || l[3] === "Lost");
+    const rc = {}; jl.forEach(l => rc[l[13] || "No reason recorded"] = (rc[l[13] || "No reason recorded"] || 0) + 1);
+    const fb = (D.feedback || {})[school.name];
+    const keep = F.school; F.school = si; const team = productivity().filter(r => r.assigned || r.dials || r.vb || r.vd); F.school = keep;
     return [
       h("div", { class: "pickrow" }, h("label", {}, "School", picker)),
       h("div", { class: "tiles" },
         [["Spend", inr(spendTot), sp.length ? [...new Set(sp.map(x => x.agency))].join(", ") : "No spend data"],
-         ["Leads", fmt(c[0]), `${fmt(cp[0])} from paid ads`], ["CPL (paid leads)", cost(cp[0]), `Blended ${cost(c[0])} on all leads`],
-         ["Walk-ins", fmt(c[2]), `${pc(c[2], c[0])} of leads · ${cost(c[2])} each`], ["Applications", fmt(c[3]), `${cost(c[3])} each`], ["Admissions", fmt(c[4]), `${cost(c[4])} each`]]
+         ["Leads", fmt(c[0]), `${fmt(cp[0])} from paid ads · CPL ${cost(cp[0])}`],
+         ["Visits scheduled", fmt(c[1]), `${pct(c[1], c[0])} of leads`],
+         ["Walk-ins", fmt(c[2]), `${pct(c[2], c[0])} of leads · ${cost(c[2])} each`],
+         ["Applications", fmt(c[3]), `${cost(c[3])} each`], ["Admissions", fmt(c[4]), `${cost(c[4])} each`]]
         .map(([k, v, s2]) => h("div", { class: "tile" }, h("div", { class: "k" }, k), h("div", { class: "v" }, v), h("div", { class: "s" }, s2)))),
       h("div", { class: "grid2" },
-        h("section", { class: "card" }, h("h2", {}, "Spend to admission"), h("p", { class: "sub" }, "Leads created in the selected dates, and how far each has got. Cost uses spend in the same dates."),
-          h("div", { class: "tw" }, h("table", {}, h("thead", {}, h("tr", {}, ["Stage", "Count", "Conversion", "Cost each"].map(t => h("th", {}, t)))),
-            h("tbody", {}, h("tr", {}, h("td", {}, "Spend"), h("td", {}, inr(spendTot)), h("td", {}, ""), h("td", {}, "")),
-              stages.map(([t, n], i) => h("tr", {}, h("td", {}, t), h("td", {}, fmt(n)), h("td", {}, i < 2 ? (i ? pc(n, c[0]) + " of leads" : "") : pc(n, stages[i === 2 ? 0 : i - 1][1]) + " of prev."), h("td", {}, cost(n)))))))),
-        h("section", { class: "card" }, h("h2", {}, "Lead quality, paid leads"), h("p", { class: "sub" }, `${fmt(q.length)} leads from Meta and Google ads in these dates.`),
-          h("div", { class: "funnel" }, qual.map(([t, n]) => h("div", { class: "frow" }, h("div", {}, t),
-            h("div", { class: "track" }, h("div", { class: "fill", style: `width:${q.length ? 100 * n / q.length : 0}%` })),
-            h("div", { class: "n" }, fmt(n), h("span", {}, pc(n, q.length)))))))),
-      h("section", { class: "card" }, h("h2", {}, "By channel"), h("p", { class: "sub" }, "Spend from the agency; leads and later stages from the CRM. Meta covers Meta, Instagram and Facebook ads."),
-        table([{ t: "Channel", v: r => r.name, f: x => x }, { t: "Agency", v: r => r.agency, f: x => x }, { t: "Spend", v: r => r.spend, f: inr, bar: true },
-          { t: "Impressions", v: r => r.impressions }, { t: "CRM leads", v: r => r.c[0] }, { t: "CPL", v: r => r.spend && r.c[0] ? r.spend / r.c[0] : null, f: inr },
-          { t: "Walk-ins", v: r => r.c[2] }, { t: "Applications", v: r => r.c[3] }, { t: "Admissions", v: r => r.c[4] },
-          { t: "Leads reported by agency", v: r => r.agencyLeads, tip: "For reference only; the report uses CRM leads" }], chans, { sort: 2 })),
-      h("section", { class: "card" }, h("h2", {}, "By lead source"),
-        table(funnelCols("Source"), D.sources.map((s, i) => ({ name: s, c: count(all.filter(l => l[2] === i)) })).filter(r => r.c[0]), { total: { name: "Total", c } })),
-      h("section", { class: "card" }, h("h2", {}, "Week by week"), h("p", { class: "sub" }, "Weeks start on Monday."),
-        table([{ t: "Week of", v: r => r.name, f: dshort }, { t: "Spend", v: r => r.spend, f: inr, bar: true }, { t: "Leads", v: r => r.all }, { t: "Paid leads", v: r => r.paid },
-          { t: "CPL", v: r => r.spend && r.paid ? r.spend / r.paid : null, f: inr }, { t: "Visits scheduled", v: r => r.c[1] }, { t: "Walk-ins", v: r => r.c[2] }, { t: "Applications", v: r => r.c[3] }], wrows, { sort: 0 })),
-      h("div", { class: "grid2" },
-        h("section", { class: "card" }, h("h2", {}, "Spend per day"), dailyBars(dates.map(d => [d, Math.round(sp.filter(x => x.date === d).reduce((t, x) => t + x.spend, 0))]), "Spend", inr)),
-        h("section", { class: "card" }, h("h2", {}, "Leads per day"), dailyBars(dates.map(d => [d, all.filter(l => l[0] === d).length]), "Leads"))),
-      h("section", { class: "card" }, h("h2", {}, "Counsellors on this school's leads"), h("p", { class: "sub" }, "Activity on this school's leads in the selected dates."),
+        h("section", { class: "card" }, h("h2", {}, "Lead quality, paid leads"), h("p", { class: "sub" }, `${fmt(q.length)} leads from Meta and Google ads.`), bars(qual, q.length)),
+        h("section", { class: "card" }, h("h2", {}, "Why leads are junk or lost"), h("p", { class: "sub" }, `${fmt(jl.length)} junk or lost leads, all sources, by the reason the counsellor recorded.`),
+          jl.length ? bars(Object.entries(rc).sort((a, b) => b[1] - a[1]), jl.length) : h("p", { class: "muted" }, "None in these dates."))),
+      fb ? h("section", { class: "card ai" }, h("h2", {}, "AI read-out on junk and lost leads"),
+        h("p", { class: "sub" }, `From the CRM's lost reasons, counsellor notes and call recordings, ${fb.asof}.`),
+        fb.points.map(t => h("p", {}, t)),
+        fb.calls?.length ? [h("h3", {}, "Calls that show it"), h("div", { class: "calls" }, fb.calls.map(callCard))] : null) : null,
+      chans.length > 1 ? h("section", { class: "card" }, h("h2", {}, "By channel"),
+        table([{ t: "Channel", v: r => r.name, f: x => x }, { t: "Spend", v: r => r.spend, f: inr, bar: true }, { t: "Leads", v: r => r.c[0] },
+          { t: "CPL", v: r => r.spend && r.c[0] ? r.spend / r.c[0] : null, f: inr }, { t: "Walk-ins", v: r => r.c[2] }, { t: "Applications", v: r => r.c[3] }], chans, { sort: 1 })) : null,
+      h("section", { class: "card" }, h("h2", {}, "Week by week"),
+        table([{ t: "Week of", v: r => r.name, f: dshort }, { t: "Spend", v: r => r.spend, f: inr, bar: true }, { t: "Leads", v: r => r.c[0] }, { t: "Paid leads", v: r => r.paid },
+          { t: "CPL", v: r => r.spend && r.paid ? r.spend / r.paid : null, f: inr }, { t: "Walk-ins", v: r => r.c[2] }, { t: "Applications", v: r => r.c[3] }], wrows, { sort: 0 })),
+      h("section", { class: "card" }, h("h2", {}, "Counsellors on this school's leads"),
         table([{ t: "Counsellor", v: r => r.name, f: x => x }, { t: "Role", v: r => r.role, f: x => x }, { t: "Leads assigned", v: r => r.assigned }, { t: "Untouched", v: r => r.untouched },
-          { t: "Dials", v: r => r.dials, bar: true }, { t: "Connects", v: r => r.connects }, { t: "Talk (min)", v: r => r.talk },
-          { t: "Visits scheduled", v: r => r.vb }, { t: "Walk-ins", v: r => r.vd }, { t: "Applications", v: r => r.apps }, { t: "First call (hrs)", v: r => r.firstHrs, f: fmt1 }], team, { sort: 2 })),
-      sp.some(x => x.spread) ? h("p", { class: "note" }, "This school's agency sent one total for a period, spread evenly over its days.") : null
+          { t: "Dials", v: r => r.dials, bar: true }, { t: "Connect rate", v: r => r.dials ? r.connects / r.dials : null, f: x => x == null ? "–" : Math.round(100 * x) + "%" },
+          { t: "Walk-ins", v: r => r.vd }, { t: "First call (hrs)", v: r => r.firstHrs, f: fmt1 }], team, { sort: 2 }))
     ];
   }
 
@@ -324,32 +308,22 @@
     const tot = { name: "Total", agency: "", first: null, meta: sum("meta"), google: sum("google"), spend: sum("spend"), matched: sum("matched"),
       all: sum("all"), paid: sum("paid"), reached: sum("reached"), untouched: sum("untouched"), junk: sum("junk"), lost: sum("lost"), hotwarm: sum("hotwarm"),
       c: [0, 1, 2, 3, 4].map(i => rows.reduce((t, r) => t + r.c[i], 0)) };
-    const per = (k, i) => r => r[k] && r.c[i] ? r[k] / r.c[i] : null;
-    const share = (k) => ({ v: r => r.paid ? r[k] / r.paid : null, f: x => x == null ? "–" : Math.round(100 * x) + "%" });
+    const per = i => r => r.spend && r.c[i] ? r.spend / r.c[i] : null;
+    const share = k => ({ v: r => r.paid ? r[k] / r.paid : null, f: x => x == null ? "–" : Math.round(100 * x) + "%" });
     const costCols = [
       { t: "School", v: r => r.name, f: x => x },
-      { t: "Agency", v: r => r.agency, f: x => x },
-      { t: "Dates", v: r => r.first ? `${dshort(r.first)} – ${dshort(r.last)}` : "–", f: x => x, tip: "First and last day with spend in the selected dates" },
-      { t: "Meta spend", v: r => r.meta, f: inr }, { t: "Google spend", v: r => r.google, f: inr },
-      { t: "Total spend", v: r => r.spend, f: inr, bar: true },
-      { t: "Paid leads", v: r => r.paid, tip: "CRM leads from the channels this school paid for (Meta = Meta, Instagram and Facebook ads; Google = Google Ads), in the spend dates" },
-      { t: "CPL", v: r => r.paid ? r.matched / r.paid : null, f: inr, tip: "Cost per paid lead" },
-      { t: "All leads", v: r => r.all, tip: "Every CRM lead for the school in the spend dates, any source" },
-      { t: "Blended CPL", v: r => r.all ? r.matched / r.all : null, f: inr, tip: "Spend divided by all leads" },
-      { t: "Walk-ins", v: r => r.c[2] }, { t: "Cost / walk-in", v: per("matched", 2), f: inr },
-      { t: "Applications", v: r => r.c[3] }, { t: "Cost / application", v: per("matched", 3), f: inr },
-      { t: "Admissions", v: r => r.c[4] }, { t: "Cost / admission", v: per("matched", 4), f: inr }];
+      { t: "Spend", v: r => r.spend, f: inr, bar: true, tip: "Agency-reported spend in the selected dates" },
+      { t: "Paid leads", v: r => r.paid, tip: "CRM leads from Meta (Meta, Instagram, Facebook) and Google ads, in the spend dates" },
+      { t: "CPL", v: r => r.paid ? r.spend / r.paid : null, f: inr, tip: "Cost per paid lead" },
+      { t: "Walk-ins", v: r => r.c[2] }, { t: "Cost / walk-in", v: per(2), f: inr },
+      { t: "Applications", v: r => r.c[3] }, { t: "Cost / application", v: per(3), f: inr }];
     const qualCols = [
       { t: "School", v: r => r.name, f: x => x },
       { t: "Paid leads", v: r => r.paid, bar: true },
       { t: "Reached", ...share("reached"), tip: "At least one connected call" },
       { t: "Untouched", ...share("untouched"), tip: "Still New and never dialled" },
       { t: "Hot or warm", ...share("hotwarm"), tip: "Intent marked Hot or Warm by the counsellor" },
-      { t: "Junk", ...share("junk") }, { t: "Lost", ...share("lost") },
-      { t: "Visit scheduled", v: r => r.paid ? r.c[1] / r.paid : null, f: x => x == null ? "–" : Math.round(100 * x) + "%" },
-      { t: "Walk-in", v: r => r.paid ? r.c[2] / r.paid : null, f: x => x == null ? "–" : Math.round(100 * x) + "%" },
-      { t: "Application", v: r => r.paid ? r.c[3] / r.paid : null, f: x => x == null ? "–" : (Math.round(1000 * x) / 10) + "%" },
-      { t: "Admission", v: r => r.paid ? r.c[4] / r.paid : null, f: x => x == null ? "–" : (Math.round(1000 * x) / 10) + "%" }];
+      { t: "Junk", ...share("junk") }, { t: "Lost", ...share("lost") }];
     // Paid leads at schools with no spend data for that channel
     const missing = [];
     for (const ch of Object.keys(D.channels)) {
@@ -357,73 +331,50 @@
       D.schools.forEach((s, si) => {
         if (spend.some(x => x.school === s.name && x.channel === ch)) return;
         const n = D.leads.filter(l => l[1] === si && src.has(l[2]) && leadOk(l)).length;
-        if (n) missing.push({ name: s.short, ch, n });
+        if (n) missing.push(`${s.short} (${ch}, ${n})`);
       });
     }
-    const spread = rows.some(r => r.spread);
     return [
-      h("div", { class: "tiles" },
-        h("div", { class: "tile" }, h("div", { class: "k" }, "Marketing spend"), h("div", { class: "v" }, inr(tot.spend)), h("div", { class: "s" }, `${rows.length} school${rows.length === 1 ? "" : "s"} with spend data`)),
-        h("div", { class: "tile" }, h("div", { class: "k" }, "Paid leads"), h("div", { class: "v" }, fmt(tot.paid)), h("div", { class: "s" }, `CPL ${inr(tot.paid ? tot.matched / tot.paid : null)}`)),
-        h("div", { class: "tile" }, h("div", { class: "k" }, "Walk-ins from paid leads"), h("div", { class: "v" }, fmt(tot.c[2])), h("div", { class: "s" }, `${inr(tot.c[2] ? tot.matched / tot.c[2] : null)} per walk-in`)),
-        h("div", { class: "tile" }, h("div", { class: "k" }, "Applications from paid leads"), h("div", { class: "v" }, fmt(tot.c[3])), h("div", { class: "s" }, `${inr(tot.c[3] ? tot.matched / tot.c[3] : null)} per application`))),
       h("section", { class: "card" }, h("h2", {}, "Spend, leads and cost by school"),
         h("p", { class: "sub" }, "Spend is what the agencies report. Leads and every stage after them come from the CRM."),
-        rows.length ? table(costCols, rows, { total: tot, sort: 5 }) : h("p", { class: "muted" }, "No spend data in these dates."),
-        spread ? h("p", { class: "note" }, "Some agencies sent one total for a period. That total is spread evenly over its days, so a shorter date filter shows a pro-rated share.") : null),
-      h("section", { class: "card" }, h("h2", {}, "Lead quality and funnel, paid leads"),
-        h("p", { class: "sub" }, "Share of each school's paid leads at each stage so far."),
-        rows.length ? table(qualCols, rows, { total: tot, sort: 1 }) : null),
-      h("section", { class: "card" }, h("h2", {}, "Paid leads with no spend data yet"),
-        h("p", { class: "sub" }, "Leads from paid channels at schools where no agency has sent spend for that channel in these dates."),
-        missing.length ? table([{ t: "School", v: r => r.name, f: x => x }, { t: "Channel", v: r => r.ch, f: x => x }, { t: "CRM leads", v: r => r.n, bar: true }], missing, { sort: 2 })
-          : h("p", { class: "muted" }, "Every paid lead in these dates has spend data."))
+        rows.length ? table(costCols, rows, { total: tot, sort: 1 }) : h("p", { class: "muted" }, "No spend data in these dates."),
+        rows.some(r => r.spread) ? h("p", { class: "note" }, "Some agencies sent one total for a period; it is spread evenly over its days.") : null,
+        missing.length ? h("p", { class: "note" }, `Paid leads with no spend data yet: ${missing.join(", ")}.`) : null),
+      h("section", { class: "card" }, h("h2", {}, "Lead quality, paid leads"),
+        rows.length ? table(qualCols, rows, { total: tot, sort: 1 }) : null)
     ];
   }
 
   // ---------- calls ----------
+  function callCard(c) {
+    const box = h("div", { class: "card call" },
+      h("h3", {}, `${c.counsellor} · ${c.school}`),
+      h("div", { class: "meta" }, `${c.when} · ${Math.floor(c.dur_s / 60)} min ${c.dur_s % 60} s · ${c.outcome}`),
+      h("p", {}, c.desc));
+    const btn = h("button", { class: "btn", onclick: async () => {
+      btn.disabled = true; btn.textContent = "Loading…";
+      try {
+        const plain = await decrypt(await (await fetch("rec/" + c.file)).arrayBuffer());
+        const a = h("audio", { controls: "", src: URL.createObjectURL(new Blob([plain], { type: "audio/mpeg" })) });
+        btn.replaceWith(a); a.play();
+      } catch { btn.textContent = "Recording not available"; }
+    } }, "▶ Play recording");
+    box.append(btn); return box;
+  }
   function viewCalls() {
     const cs = D.showcase || [];
-    return [h("section", { class: "card" }, h("h2", {}, "Sample calls"),
-      h("p", { class: "sub" }, "Recorded calls from the central admissions desk. Press play to listen."),
-      cs.length ? h("div", { class: "calls" }, cs.map(c => {
-        const box = h("div", { class: "card call" },
-          h("h3", {}, `${c.counsellor} · ${c.school}`),
-          h("div", { class: "meta" }, `${c.when} · ${Math.floor(c.dur_s / 60)} min ${c.dur_s % 60} s · ${c.outcome}`),
-          h("p", {}, c.desc));
-        const btn = h("button", { class: "btn", onclick: async () => {
-          btn.disabled = true; btn.textContent = "Loading…";
-          try {
-            const plain = await decrypt(await (await fetch("rec/" + c.file)).arrayBuffer());
-            const a = h("audio", { controls: "", src: URL.createObjectURL(new Blob([plain], { type: "audio/mpeg" })) });
-            btn.replaceWith(a); a.play();
-          } catch { btn.textContent = "Recording not available"; }
-        } }, "▶ Play recording");
-        box.append(btn); return box;
-      })) : h("p", { class: "muted" }, "Recordings are being added."))];
-  }
-
-  // ---------- notes ----------
-  function viewNotes() {
-    const d = D.meta.definitions;
-    return [h("section", { class: "card" }, h("h2", {}, "Definitions"),
-      h("table", {}, h("tbody", {}, [["Lead", d.lead], ["Visit scheduled", d.visit_scheduled], ["Walk-in", d.visit_done], ["Application", d.application], ["Admission", d.admission],
-        ["Funnel", "Counts leads created in the selected dates and how far each has progressed so far, so recent leads have had less time to convert."],
-        ["Productivity", "Calls, visits, applications and admissions count when they happened, within the selected dates."],
-        ["Spend and ROI", "Spend is what the agencies report, by school. Leads, walk-ins, applications and admissions come from the CRM, never from the agency's own counts. Paid leads are CRM leads from the channels the school paid for, created between its first and last day of spend."]]
-        .map(([k, v]) => h("tr", {}, h("td", {}, h("b", {}, k)), h("td", { style: "text-align:left;white-space:normal" }, v)))))),
-      h("section", { class: "card" }, h("h2", {}, "Data"),
-        h("p", {}, `Season ${D.meta.season}, from ${dshort(D.meta.start)}. Source: GEMS CRM, refreshed ${D.meta.taken}. Duplicate leads are excluded. The report holds no parent names or contact details.`))];
+    return [h("p", { class: "sub" }, "Recorded calls from the central admissions desk. Press play to listen."),
+      cs.length ? h("div", { class: "calls" }, cs.map(callCard)) : h("p", { class: "muted" }, "Recordings are being added.")];
   }
 
   // ---------- router ----------
-  const VIEWS = { school: ["School view", viewSchool], funnel: ["Funnel", viewFunnel], productivity: ["Productivity", viewProductivity], roi: ["Spend and ROI by school", viewROI], calls: ["Calls", viewCalls], notes: ["Definitions", viewNotes] };
+  const VIEWS = { funnel: ["Funnel", viewFunnel], productivity: ["Productivity", viewProductivity], roi: ["Spend and ROI", viewROI], school: ["School view", viewSchool], calls: ["Sample calls", viewCalls] };
   function render() {
     store.set("gems-lr-f", JSON.stringify(F));
-    const name = (location.hash.match(/^#\/(\w+)/) || [])[1] in VIEWS ? location.hash.match(/^#\/(\w+)/)[1] : "school";
+    const name = (location.hash.match(/^#\/(\w+)/) || [])[1] in VIEWS ? location.hash.match(/^#\/(\w+)/)[1] : "funnel";
     document.querySelectorAll("#nav a").forEach(a => a.classList.toggle("on", a.dataset.nav === name));
     filterBar();
-    $("#filters").hidden = name === "calls" || name === "notes";
+    $("#filters").hidden = name === "calls";
     const ss = $("#filters select"); if (ss && name === "school") ss.closest("label").hidden = true;
     const v = $("#view"); v.innerHTML = "";
     v.append(h("h1", {}, VIEWS[name][0]), ...VIEWS[name][1]());

@@ -36,7 +36,7 @@ def get(doctype, fields, filters=()):
 
 
 leads = get("CRM Lead", ["name", "creation", "source", "territory", "status", "is_duplicate", "utm_source", "visit_state",
-                         "visit_done_on", "_assign", "lead_owner", "attempt_count", "mobile_no", "phone", "intent"])
+                         "visit_done_on", "_assign", "lead_owner", "attempt_count", "mobile_no", "phone", "intent", "lost_reason"])
 deals = get("CRM Deal", ["lead", "status", "deal_owner", "application_submitted_on", "application_fee_paid_on",
                          "blocking_fee_paid_on", "enrolled_on", "modified"])
 visits = get("GEMS Visit", ["enquiry", "campus", "creation", "scheduled_on", "status", "attended_on", "conducted_by", "owner"])
@@ -93,6 +93,9 @@ for d in deals:
     if a: app[i] = first(app.get(i), a)
     if m: adm[i] = first(adm.get(i), m)
 
+GROUP = {r: g for g, rs in CFG["reason_groups"].items() for r in rs}
+reason = lambda l: GROUP.get((l["lost_reason"] or "").strip().lower(), "Other")
+
 L = []
 for i, l in enumerate(leads):
     vs = vsched.get(i) or (day(l["creation"]) if l["visit_state"] in ("Booked", "Attended", "No show") else None)
@@ -101,7 +104,7 @@ for i, l in enumerate(leads):
     L.append([day(l["creation"]), six[l["territory"] or "Unassigned"], srcix[l["source"] or "Not set"], l["status"],
               vs, vd, app.get(i), adm.get(i), [p for p in assignees if p >= 0],
               1 if (l["status"] == "New" and not (l["attempt_count"] or 0)) else 0, (l["utm_source"] or "").lower(),
-              l["creation"][:16], l["intent"] or ""])
+              l["creation"][:16], l["intent"] or "", reason(l) if l["status"] in ("Junk", "Lost") else ""])
 
 # Calls: [date, person, "O"/"I", connected, seconds, lead index or -1, datetime]
 K = []

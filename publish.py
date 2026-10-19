@@ -26,13 +26,15 @@ enc = lambda b: (lambda iv: iv + AESGCM(key).encrypt(iv, b, None))(secrets.token
 
 os.makedirs(os.path.join(DOCS, "rec"), exist_ok=True)
 data = json.load(open(os.path.join(HERE, "build", "data.json")))
-# Sample calls: showcase.json (local, git-ignored) is stored encrypted as docs/rec/showcase.enc so scheduled builds keep it.
-sp, se = os.path.join(HERE, "showcase.json"), os.path.join(DOCS, "rec", "showcase.enc")
-if os.path.exists(sp):
-    open(se, "wb").write(enc(open(sp, "rb").read()))
-if os.path.exists(se):
-    b = open(se, "rb").read()
-    data["showcase"] = json.loads(AESGCM(key).decrypt(b[:12], b[12:], None))
+# Sample calls (showcase.json) and the AI feedback on junk/lost leads (feedback.json) are written locally (git-ignored)
+# and stored encrypted in docs/rec/, so scheduled builds keep them.
+for name in ("showcase", "feedback"):
+    sp, se = os.path.join(HERE, name + ".json"), os.path.join(DOCS, "rec", name + ".enc")
+    if os.path.exists(sp):
+        open(se, "wb").write(enc(open(sp, "rb").read()))
+    if os.path.exists(se):
+        b = open(se, "rb").read()
+        data[name] = json.loads(AESGCM(key).decrypt(b[:12], b[12:], None))
 # Agency spend is commercial data, so the CSVs stay out of git: each spend/<agency>.csv is stored encrypted as
 # docs/spend/<agency>.enc, and a build without the CSV (e.g. the scheduled refresh) falls back to that copy.
 # A row with date_to covers a whole period; it is spread evenly over its days.

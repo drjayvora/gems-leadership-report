@@ -2,7 +2,6 @@
   "season": "2027-28",
   "season_start": "2026-09-01",
   "crm": "https://gemseducation.m.frappe.cloud",
-
   "definitions": {
     "lead": "Every CRM lead created in the period, excluding leads marked as duplicates.",
     "visit_scheduled": "Lead has a campus visit booked (any GEMS Visit, or visit state Booked / Attended / No show).",
@@ -10,12 +9,24 @@
     "application": "Application fee paid (deal has an application fee paid date, or has moved past that stage).",
     "admission": "Admission fee paid (deal has a blocking/admission fee paid date, or is Enrolled)."
   },
-
-  "application_statuses": ["Application Fee Paid", "Documents Submitted", "Admission Letter Released", "Blocking Fee Paid", "Enrolled"],
-  "admission_statuses": ["Blocking Fee Paid", "Enrolled"],
-
-  "ignore_users": ["jay.vora@gemsedu.in", "hello@alignd.in", "admissiondesk@gemsedu.in", "Administrator", "Guest"],
-
+  "application_statuses": [
+    "Application Fee Paid",
+    "Documents Submitted",
+    "Admission Letter Released",
+    "Blocking Fee Paid",
+    "Enrolled"
+  ],
+  "admission_statuses": [
+    "Blocking Fee Paid",
+    "Enrolled"
+  ],
+  "ignore_users": [
+    "jay.vora@gemsedu.in",
+    "hello@alignd.in",
+    "admissiondesk@gemsedu.in",
+    "Administrator",
+    "Guest"
+  ],
   "school_short": {
     "GEMS Millennium School - Indirapuram": "GMS Indirapuram",
     "GEMS Millennium School - Gurugram": "GMS Gurugram",
@@ -30,19 +41,74 @@
     "GEMS Millennium School - Kalyan": "GMS Kalyan",
     "Little GEMS - Kochi": "Little GEMS Kochi"
   },
-
   "channels": {
-    "Meta": ["Meta Ads", "Instagram Ads", "Facebook"],
-    "Google": ["Google Ads"]
+    "Meta": [
+      "Meta Ads",
+      "Instagram Ads",
+      "Facebook"
+    ],
+    "Google": [
+      "Google Ads"
+    ]
   },
-
   "agencies": {
     "EchoVME": {
       "adapter": "agencies/echovme.py",
       "sheet_env": "ECHOVME_SHEET",
       "utm_sources": []
     },
-    "Edelytics": {"adapter": "agencies/edelytics.py", "sheet_env": "EDELYTICS_SHEET", "utm_sources": []},
-    "Because": {"adapter": "spend/because.csv (totals sent by message)", "utm_sources": []}
+    "Edelytics": {
+      "adapter": "agencies/edelytics.py",
+      "sheet_env": "EDELYTICS_SHEET",
+      "utm_sources": []
+    },
+    "Because": {
+      "adapter": "spend/because.csv (totals sent by message)",
+      "utm_sources": []
+    }
+  },
+  "reason_groups": {
+    "Invalid or not a real enquiry": [
+      "duplicate or invalid enquiry",
+      "applied mistakenly",
+      "invalid",
+      "wrong number",
+      "international number",
+      "unreachable"
+    ],
+    "Not looking for admission": [
+      "not looking for admission",
+      "not iooking for admissions",
+      "not inetersted",
+      "not interested",
+      "continuing in the same previous school",
+      "deferred to next academic year"
+    ],
+    "Looking for a job, not admission": [
+      "looking for job",
+      "interested only if she gets a job in gems"
+    ],
+    "Distance or out of zone": [
+      "distance / transport not viable",
+      "out of zone"
+    ],
+    "Chose another school": [
+      "chose another school"
+    ],
+    "Fees": [
+      "fee too high"
+    ],
+    "Curriculum or grade": [
+      "prefer cbse",
+      "state to cbse issue",
+      "no seat in requested grade"
+    ],
+    "Language barrier": [
+      "language barrier"
+    ],
+    "No reason recorded": [
+      "not recorded",
+      ""
+    ]
   }
 }

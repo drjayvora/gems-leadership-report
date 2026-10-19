@@ -101,3 +101,6 @@ td.heat { text-align: center; }
   #nav { order: 3; flex: 1 1 100%; flex-wrap: nowrap; overflow-x: auto; }
   #nav a { white-space: nowrap; }
 }
+.card.ai { border-left: 3px solid var(--accent); }
+.card.ai > p { margin: 0 0 8px; max-width: 900px; }
+.card.ai h3 { margin: 14px 0 8px; }
