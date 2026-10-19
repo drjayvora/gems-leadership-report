@@ -57,6 +57,9 @@ for name, text in texts.items():
             spend.append(dict(date=(d0 + datetime.timedelta(days=i)).isoformat(), agency=r["agency"], school=r["school"], channel=r["channel"],
                               objective=r["objective"], spread=n > 1, **{k: float(r.get(k) or 0) / n for k in ("spend", "impressions", "reach", "agency_leads")}))
 data["spend"] = spend
+# The season view starts at the earlier of the first lead and the first spend, so all spend counts.
+if spend:
+    data["meta"]["start"] = min(data["meta"]["start"], min(x["date"] for x in spend))
 names = {s["name"] for s in data["schools"]}
 for sch in sorted({x["school"] for x in spend} - names):
     data["schools"].append(dict(name=sch, short=sch))

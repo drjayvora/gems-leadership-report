@@ -57,7 +57,9 @@
 
   // ---------- filters ----------
   const inRange = d => d && d >= F.from && d <= F.to;
-  const leadOk = l => inRange(l[0]) && (F.school < 0 || l[1] === F.school) && (F.source < 0 || l[2] === F.source);
+  let SCH = null;   // set of school indexes while School view computes for its picked schools
+  const sOk = i => SCH ? SCH.has(i) : F.school < 0 || i === F.school;
+  const leadOk = l => inRange(l[0]) && sOk(l[1]) && (F.source < 0 || l[2] === F.source);
   function filterBar() {
     const el = $("#filters"); el.innerHTML = ""; el.hidden = false;
     const date = (k, label) => h("label", {}, label, h("input", { type: "date", value: F[k], min: D.meta.start, max: D.meta.end,
@@ -157,7 +159,7 @@
   function productivity() {
     const firstCall = new Map();   // "p|lead" -> earliest outgoing call datetime by p
     for (const k of D.calls) if (k[2] === "O" && k[5] >= 0) { const key = k[1] + "|" + k[5]; if (!firstCall.has(key) || k[6] < firstCall.get(key)) firstCall.set(key, k[6]); }
-    const schoolOkLead = i => i >= 0 ? (F.school < 0 || D.leads[i][1] === F.school) && (F.source < 0 || D.leads[i][2] === F.source) : F.school < 0 && F.source < 0;
+    const schoolOkLead = i => i >= 0 ? sOk(D.leads[i][1]) && (F.source < 0 || D.leads[i][2] === F.source) : !SCH && F.school < 0 && F.source < 0;
     return D.people.map((p, pi) => {
       const mine = D.leads.map((l, i) => [l, i]).filter(([l]) => l[8].includes(pi));
       const home = (() => { const c = {}; mine.forEach(([l]) => c[l[1]] = (c[l[1]] || 0) + 1); const b = Object.entries(c).sort((a, b) => b[1] - a[1])[0]; return b ? D.schools[b[0]].short : "–"; })();
@@ -165,9 +167,9 @@
       const ks = D.calls.filter(k => k[1] === pi && inRange(k[0]) && schoolOkLead(k[5]));
       const out = ks.filter(k => k[2] === "O"), inc = ks.filter(k => k[2] === "I" && k[3]);
       const callDays = new Set(out.map(k => k[0])).size;
-      const vb = D.visits.filter(v => v[1] === pi && inRange(v[0]) && (F.school < 0 || v[5] === F.school)).length;
-      const vd = D.visits.filter(v => (v[1] === pi || v[2] === pi) && v[3] === "Done" && inRange(v[4]) && (F.school < 0 || v[5] === F.school)).length;
-      const act = mine.filter(([l]) => (F.school < 0 || l[1] === F.school) && (F.source < 0 || l[2] === F.source));
+      const vb = D.visits.filter(v => v[1] === pi && inRange(v[0]) && sOk(v[5])).length;
+      const vd = D.visits.filter(v => (v[1] === pi || v[2] === pi) && v[3] === "Done" && inRange(v[4]) && sOk(v[5])).length;
+      const act = mine.filter(([l]) => sOk(l[1]) && (F.source < 0 || l[2] === F.source));
       const hrs = assigned.map(([l, i]) => { const t = firstCall.get(pi + "|" + i); return t ? (Date.parse(t.replace(" ", "T")) - Date.parse(l[11].replace(" ", "T"))) / 36e5 : null; })
         .filter(x => x != null && x >= 0).sort((a, b) => a - b);
       return { name: p.name, role: p.role, home, assigned: assigned.length, untouched: assigned.filter(([l]) => l[9]).length,
@@ -211,17 +213,22 @@
   function viewSchool() {
     const withData = D.schools.map((s, i) => [s, i, D.leads.filter(l => l[1] === i).length + (D.spend.some(x => x.school === s.name) ? 1e6 : 0)])
       .filter(([, , n]) => n).sort((a, b) => b[2] - a[2]);
-    // The School view keeps its own pick, so the other tabs stay on all schools.
-    if (!(F.pick >= 0) && withData.length) F.pick = withData[0][1];
-    const si = F.pick, school = D.schools[si];
-    const picker = h("select", { class: "bigselect", onchange: e => { F.pick = +e.target.value; render(); } },
-      withData.map(([s, i]) => h("option", { value: i, selected: i === si ? "" : null }, s.name)));
-    if (!school) return [picker];
+    // The School view keeps its own picks (one or more schools), so the other tabs stay on all schools.
+    if (!Array.isArray(F.picks)) F.picks = F.pick >= 0 ? [F.pick] : [];
+    F.picks = F.picks.filter(i => withData.some(([, j]) => j === i));
+    if (!F.picks.length && withData.length) F.picks = [withData[0][1]];
+    const S = new Set(F.picks), names = new Set(F.picks.map(i => D.schools[i].name));
+    const toggle = i => { F.picks = S.has(i) ? F.picks.filter(j => j !== i) : [...F.picks, i]; if (!F.picks.length) F.picks = [i]; render(); };
+    const picker = h("div", { class: "chips" },
+      withData.map(([s, i]) => h("button", { type: "button", class: "chip" + (S.has(i) ? " on" : ""), "aria-pressed": S.has(i) ? "true" : "false", onclick: () => toggle(i) }, s.name)),
+      h("button", { type: "button", class: "chip ghost", onclick: () => { F.picks = withData.map(([, i]) => i); render(); } }, "Select all"),
+      F.picks.length > 1 ? h("button", { type: "button", class: "chip ghost", onclick: () => { F.picks = [F.picks[0]]; render(); } }, "Clear") : null);
+    if (!S.size) return [picker];
     const srcOf = ch => new Set((D.channels[ch] || []).map(s => D.sources.indexOf(s)));
     const paidSrc = new Set(Object.keys(D.channels).flatMap(ch => [...srcOf(ch)]));
-    const sp = D.spend.filter(x => x.school === school.name && inRange(x.date));
+    const sp = D.spend.filter(x => names.has(x.school) && inRange(x.date));
     const spendTot = sp.reduce((t, x) => t + x.spend, 0);
-    const ls = D.leads.map((l, i) => [l, i]).filter(([l]) => l[1] === si && inRange(l[0]) && (F.source < 0 || l[2] === F.source));
+    const ls = D.leads.map((l, i) => [l, i]).filter(([l]) => S.has(l[1]) && inRange(l[0]) && (F.source < 0 || l[2] === F.source));
     const all = ls.map(([l]) => l), paid = ls.filter(([l]) => paidSrc.has(l[2]));
     const c = count(all), cp = count(paid.map(([l]) => l));
     const reached = new Set(D.calls.filter(k => k[3] && k[5] >= 0).map(k => k[5]));
@@ -246,10 +253,10 @@
     // Junk and lost: reasons recorded in the CRM, plus the written read-out and proof calls
     const jl = all.filter(l => l[3] === "Junk" || l[3] === "Lost");
     const rc = {}; jl.forEach(l => rc[l[13] || "No reason recorded"] = (rc[l[13] || "No reason recorded"] || 0) + 1);
-    const fb = (D.feedback || {})[school.name];
-    const keep = F.school; F.school = si; const team = productivity().filter(r => r.assigned || r.dials || r.vb || r.vd); F.school = keep;
+    const fbs = F.picks.map(i => [D.schools[i], (D.feedback || {})[D.schools[i].name]]).filter(([, f]) => f);
+    SCH = S; const team = productivity().filter(r => r.assigned || r.dials || r.vb || r.vd); SCH = null;
     return [
-      h("div", { class: "pickrow" }, h("label", {}, "School", picker)),
+      h("div", { class: "pickrow" }, h("div", { class: "muted" }, "Schools (tap to add or remove)"), picker),
       h("div", { class: "tiles" },
         [["Spend", inr(spendTot), sp.length ? [...new Set(sp.map(x => x.agency))].join(", ") : "No spend data"],
          ["Leads", fmt(c[0]), `${fmt(cp[0])} from paid ads · CPL ${cost(cp[0])}`],
@@ -261,17 +268,17 @@
         h("section", { class: "card" }, h("h2", {}, "Lead quality, paid leads"), h("p", { class: "sub" }, `${fmt(q.length)} leads from Meta and Google ads.`), bars(qual, q.length)),
         h("section", { class: "card" }, h("h2", {}, "Why leads are junk or lost"), h("p", { class: "sub" }, `${fmt(jl.length)} junk or lost leads, all sources, by the reason the counsellor recorded.`),
           jl.length ? bars(Object.entries(rc).sort((a, b) => b[1] - a[1]), jl.length) : h("p", { class: "muted" }, "None in these dates."))),
-      fb ? h("section", { class: "card ai" }, h("h2", {}, "AI read-out on junk and lost leads"),
+      fbs.map(([sc, fb]) => h("section", { class: "card ai" }, h("h2", {}, fbs.length > 1 || S.size > 1 ? `AI read-out on junk and lost leads: ${sc.name}` : "AI read-out on junk and lost leads"),
         h("p", { class: "sub" }, `From the CRM's lost reasons, counsellor notes and call recordings, ${fb.asof}.`),
         fb.points.map(t => h("p", {}, t)),
-        fb.calls?.length ? [h("h3", {}, "Calls that show it"), h("div", { class: "calls" }, fb.calls.map(callCard))] : null) : null,
+        fb.calls?.length ? [h("h3", {}, "Calls that show it"), h("div", { class: "calls" }, fb.calls.map(callCard))] : null)),
       chans.length > 1 ? h("section", { class: "card" }, h("h2", {}, "By channel"),
         table([{ t: "Channel", v: r => r.name, f: x => x }, { t: "Spend", v: r => r.spend, f: inr, bar: true }, { t: "Leads", v: r => r.c[0] },
           { t: "CPL", v: r => r.spend && r.c[0] ? r.spend / r.c[0] : null, f: inr }, { t: "Walk-ins", v: r => r.c[2] }, { t: "Applications", v: r => r.c[3] }], chans, { sort: 1 })) : null,
       h("section", { class: "card" }, h("h2", {}, "Week by week"),
         table([{ t: "Week of", v: r => r.name, f: dshort }, { t: "Spend", v: r => r.spend, f: inr, bar: true }, { t: "Leads", v: r => r.c[0] }, { t: "Paid leads", v: r => r.paid },
           { t: "CPL", v: r => r.spend && r.paid ? r.spend / r.paid : null, f: inr }, { t: "Walk-ins", v: r => r.c[2] }, { t: "Applications", v: r => r.c[3] }], wrows, { sort: 0 })),
-      h("section", { class: "card" }, h("h2", {}, "Counsellors on this school's leads"),
+      h("section", { class: "card" }, h("h2", {}, S.size > 1 ? "Counsellors on these schools' leads" : "Counsellors on this school's leads"),
         table([{ t: "Counsellor", v: r => r.name, f: x => x }, { t: "Role", v: r => r.role, f: x => x }, { t: "Leads assigned", v: r => r.assigned }, { t: "Untouched", v: r => r.untouched },
           { t: "Dials", v: r => r.dials, bar: true }, { t: "Connect rate", v: r => r.dials ? r.connects / r.dials : null, f: x => x == null ? "–" : Math.round(100 * x) + "%" },
           { t: "Walk-ins", v: r => r.vd }, { t: "First call (hrs)", v: r => r.firstHrs, f: fmt1 }], team, { sort: 2 }))
@@ -384,6 +391,8 @@
     if (!F || F.season !== D.meta.season) F = { season: D.meta.season, from: D.meta.start, to: D.meta.end, school: -1, source: -1 };
     if (F.to > D.meta.end || F.to === F.dataEnd) F.to = D.meta.end;
     F.dataEnd = D.meta.end;
+    if (!F.dataStart || F.from === F.dataStart) F.from = D.meta.start;
+    F.dataStart = D.meta.start;
     $("#gate").hidden = true; $("#top").hidden = $("#view").hidden = false;
     window.addEventListener("hashchange", render); render();
   }
