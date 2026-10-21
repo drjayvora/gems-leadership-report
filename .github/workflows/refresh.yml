@@ -4,8 +4,9 @@ name: Refresh report
 # Needs repository secrets: FRAPPE_TOKEN ("token key:secret"), CENTRAL_REPS (JSON {"email": "Name"}), LEADERSHIP_PASSWORD,
 # ECHOVME_SHEET and EDELYTICS_SHEET (Google Sheet IDs; the sheets must be viewable by link).
 on:
-  schedule:
-    - cron: "30 2-13 * * *"   # hourly, 08:00 to 19:00 IST (GitHub may run these late)
+  # Scheduled runs paused at the owner's request (21 Oct 2026). Restore to re-enable:
+  # schedule:
+  #   - cron: "30 2-13 * * *"   # hourly, 08:00 to 19:00 IST (GitHub may run these late)
   workflow_dispatch:
 
 permissions:
