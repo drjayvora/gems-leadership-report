@@ -11,14 +11,18 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.join(HERE, "..")
 CFG = json.load(open(os.path.join(ROOT, "config.json")))
 COIMBATORE, RAIPUR = "GEMS Modern Academy - Coimbatore", "GEMS Millennium School - Raipur"
+VIKHROLI, KALYAN = "GEMS Millennium School - Vikhroli", "GEMS Millennium School - Kalyan"
 
 # tab: [(school, channel, objective, date_col, spend_col, impressions_col, reach_col, leads_col)]
 BLOCKS = {
     "Sept": [(RAIPUR, "Meta", "Branding", 0, 1, 3, 2, None), (COIMBATORE, "Meta", "Branding", 0, 6, 8, 7, None),
              (RAIPUR, "Google", "Branding", 11, 12, 13, None, None), (COIMBATORE, "Google", "Branding", 11, 16, 17, None, None)],
+    # Oct layout (changed ~20 Oct): Meta blocks Raipur, Coimbatore branding, Coimbatore lead gen, Vikhroli, Kalyan;
+    # Google Coimbatore branding + lead gen from column 25.
     "Oct": [(RAIPUR, "Meta", "Branding", 0, 1, 3, 2, None), (COIMBATORE, "Meta", "Branding", 0, 6, 8, 7, None),
             (COIMBATORE, "Meta", "Lead gen", 0, 11, None, None, 12),
-            (COIMBATORE, "Google", "Branding", 15, 16, 17, None, None), (COIMBATORE, "Google", "Lead gen", 15, 19, None, None, 20)],
+            (VIKHROLI, "Meta", "Branding", 0, 15, 17, 16, None), (KALYAN, "Meta", "Branding", 0, 20, 22, 21, None),
+            (COIMBATORE, "Google", "Branding", 25, 26, 27, None, None), (COIMBATORE, "Google", "Lead gen", 25, 29, None, None, 30)],
 }
 
 
